@@ -46,7 +46,7 @@ export async function validate(schema: string, file: string) {
 
     const validator = new Validator();
     for (let filePath of files) {
-        const fileObject = await readFile(file, !schema);
+        const fileObject = await readFile(filePath, !schema);
         let fileSchemaObj = schemaObj || fileObject.schema;
         assert(fileSchemaObj);
         const result = validator.validate(fileObject.parsed, fileSchemaObj);

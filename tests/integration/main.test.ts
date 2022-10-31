@@ -1,7 +1,13 @@
-import {RunOptions, RunTarget} from "github-action-ts-run-api";
+import {deleteAllFakedDirs, RunOptions, RunTarget} from "github-action-ts-run-api";
 
 describe('main', () => {
-    const target = RunTarget.jsFile('lib/index.js', 'action.yml');
+    const target = process.env.CI
+        ? RunTarget.mainJs('action.yml')
+        : RunTarget.jsFile('lib/index.js', 'action.yml');
+
+    afterAll(() => {
+        deleteAllFakedDirs()
+    })
 
     it('should validate action.yml against github-action schema', async () => {
         const res = await target.run(RunOptions.create({
