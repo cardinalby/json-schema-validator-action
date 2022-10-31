@@ -35,10 +35,6 @@ export async function validate(schema: string, file: string) {
         throw new SchemaValidatorError('file', 'No files found according to "file" input.');
     }
 
-    const fileObjects: FileObject[] = await Promise.all(
-        files.map(file => readFile(file, !schema))
-    );
-
     let schemaObj;
     if (schema) {
         try {
@@ -49,7 +45,8 @@ export async function validate(schema: string, file: string) {
     }
 
     const validator = new Validator();
-    for (let fileObject of fileObjects) {
+    for (let filePath of files) {
+        const fileObject = await readFile(file, !schema);
         let fileSchemaObj = schemaObj || fileObject.schema;
         assert(fileSchemaObj);
         const result = validator.validate(fileObject.parsed, fileSchemaObj);

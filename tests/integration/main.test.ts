@@ -13,6 +13,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(true);
         expect(res.commands.errors).toEqual([]);
         expect(res.commands.outputs).toEqual({});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should validate file by $schema set in file', async () => {
@@ -24,6 +25,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(true);
         expect(res.commands.errors).toEqual([]);
         expect(res.commands.outputs).toEqual({});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should validate action.yml against angular schema', async () => {
@@ -36,6 +38,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(false);
         expect(res.commands.errors).not.toEqual([]);
         expect(res.commands.outputs).toEqual({errorType: 'validation'});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should validate package.json against schema', async () => {
@@ -48,6 +51,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(true);
         expect(res.commands.errors).toEqual([]);
         expect(res.commands.outputs).toEqual({});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should throw schema error on invalid schema', async () => {
@@ -60,6 +64,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(false);
         expect(res.commands.errors).not.toEqual([]);
         expect(res.commands.outputs).toEqual({errorType: 'schema'});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should throw schema error on missing schema', async () => {
@@ -71,6 +76,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(false);
         expect(res.commands.errors).not.toEqual([]);
         expect(res.commands.outputs).toEqual({errorType: 'schema'});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should throw remote schema error', async () => {
@@ -83,6 +89,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(false);
         expect(res.commands.errors).not.toEqual([]);
         expect(res.commands.outputs).toEqual({errorType: 'schema'});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should throw file error', async () => {
@@ -95,6 +102,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(false);
         expect(res.commands.errors).not.toEqual([]);
         expect(res.commands.outputs).toEqual({errorType: 'file'});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should validate by glob', async () => {
@@ -107,6 +115,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(true);
         expect(res.commands.errors).toEqual([]);
         expect(res.commands.outputs).toEqual({});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should validate list of files', async () => {
@@ -119,6 +128,7 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(true);
         expect(res.commands.errors).toEqual([]);
         expect(res.commands.outputs).toEqual({});
+        expect(res.warnings).toHaveLength(0);
     });
 
     it('should validate list of files with invalid', async () => {
@@ -131,5 +141,6 @@ describe('main', () => {
         expect(res.isSuccess).toEqual(false);
         expect(res.commands.errors).not.toEqual([]);
         expect(res.commands.outputs).toEqual({errorType: 'validation'});
+        expect(res.warnings).toHaveLength(0);
     });
 });
