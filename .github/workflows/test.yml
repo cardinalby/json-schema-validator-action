@@ -65,6 +65,7 @@ jobs:
         with:
           file: 'package.json'
           schema: 'tests/integration/data/schemas/package.schema.json'
+          mode: 'lax'
 
       - name: Check packageJsonAgainstLocalSchema result
         if: steps.packageJsonAgainstLocalSchema.outputs.errorType != ''
