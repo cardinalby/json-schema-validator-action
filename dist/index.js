@@ -1,20 +1,380 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
+/***/ 9386:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.ResolvedSchema = void 0;
+class ResolvedSchema {
+    constructor(mainSchema, refSchemas = new Map()) {
+        this.mainSchema = mainSchema;
+        this.refSchemas = refSchemas;
+    }
+    addRefSchemasMap(map) {
+        map.forEach((value, key) => this.refSchemas.set(key, value));
+    }
+}
+exports.ResolvedSchema = ResolvedSchema;
+//# sourceMappingURL=ResolvedSchema.js.map
+
+/***/ }),
+
+/***/ 564:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.resolveRefSchemas = exports.SchemaResolver = void 0;
+const utils_1 = __nccwpck_require__(918);
+const ghActions = __importStar(__nccwpck_require__(2186));
+const axios_1 = __importDefault(__nccwpck_require__(76));
+const fs = __importStar(__nccwpck_require__(5630));
+const metaSchemas_1 = __nccwpck_require__(4670);
+const parseObject_1 = __nccwpck_require__(8574);
+const errors_1 = __nccwpck_require__(9292);
+const ResolvedSchema_1 = __nccwpck_require__(9386);
+class SchemaResolver {
+    constructor() {
+        this.refSchemas = new Map();
+    }
+    resolve(schemaPath) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (this.refSchemas.has(schemaPath)) {
+                const otherRefs = new Map(this.refSchemas);
+                otherRefs.delete(schemaPath);
+                return new ResolvedSchema_1.ResolvedSchema(this.refSchemas.get(schemaPath), otherRefs);
+            }
+            const metaSchemas = yield (0, metaSchemas_1.loadBuiltInMetaSchema)(schemaPath);
+            if (metaSchemas !== undefined) {
+                ghActions.info(`'${schemaPath}' is a known meta schema, loaded from local storage`);
+                return metaSchemas;
+            }
+            const externalSchema = yield loadExternalSchema(schemaPath);
+            return new ResolvedSchema_1.ResolvedSchema(externalSchema, this.refSchemas);
+        });
+    }
+}
+exports.SchemaResolver = SchemaResolver;
+function resolveRefSchemas(schemasMap, schemasArray) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const resolving = schemasArray.map(path => loadExternalSchema(path).then(resolved => {
+            const id = (0, utils_1.getSchemaId)(resolved);
+            if (!id) {
+                throw new errors_1.SchemaValidationError(`Can't find id of the schema loaded from ${path}`);
+            }
+            if ((0, metaSchemas_1.hasBuiltInMetaSchema)(id)) {
+                ghActions.warning(`'${path}' from schemasArray has id of the known '${id}' meta-schema and will be used to resolve ` +
+                    `refs instead of one from action local storage. It's recommended to remove this element and ` +
+                    `use built-in meta-schema`);
+            }
+            return [id, resolved];
+        }));
+        for (let entry of schemasMap.entries()) {
+            if ((0, metaSchemas_1.hasBuiltInMetaSchema)(entry[0])) {
+                ghActions.warning(`'${entry[0]}' key from schemasMap is the known meta-schema. Data from ${entry[1]} will be used ` +
+                    `to resolve refs instead of one from action local storage. It's recommended to remove this element and` +
+                    `use built-in meta-schema`);
+            }
+            resolving.push(loadExternalSchema(entry[1]).then(resolved => [entry[0], resolved]));
+        }
+        const resolved = yield Promise.all(resolving);
+        const res = new Map();
+        const addToRes = (id, schema) => {
+            if (res.has(id)) {
+                ghActions.warning(`Duplicated id '${id}' among loaded schemas`);
+            }
+            res.set(id, schema);
+        };
+        for (let entry of resolved) {
+            const [id, resolved] = entry;
+            addToRes(id, resolved);
+        }
+        return res;
+    });
+}
+exports.resolveRefSchemas = resolveRefSchemas;
+function loadExternalSchema(schemaPath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return (0, utils_1.isValidHttpUrl)(schemaPath)
+            ? yield loadSchemaFromUrl(schemaPath)
+            : yield loadSchemaFromFile(schemaPath);
+    });
+}
+function loadSchemaFromFile(filePath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const buffer = yield fs.readFile(filePath);
+            ghActions.info(`Schema loaded from '${filePath}': ${buffer.length} bytes`);
+            return (0, parseObject_1.parseObject)(buffer.toString(), filePath);
+        }
+        catch (err) {
+            throw new errors_1.SchemaValidationError(`Can't load schema from '${filePath}': ${err}`);
+        }
+    });
+}
+function loadSchemaFromUrl(url) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            const response = yield axios_1.default.get(url, {
+                responseType: 'text'
+            });
+            ghActions.info(`Schema loaded from ${url}: ${response.status}, ${response.headers['content-type']}, ` +
+                `${response.headers['content-length']} bytes`);
+            return (0, parseObject_1.parseObject)(response.data, url);
+        }
+        catch (err) {
+            throw new errors_1.SchemaValidationError(`Can't load schema from '${url}': ${err}`);
+        }
+    });
+}
+//# sourceMappingURL=SchemaResolver.js.map
+
+/***/ }),
+
+/***/ 8366:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getActionInputs = exports.INPUT_REF_SCHEMAS_ARRAY = exports.INPUT_REF_SCHEMAS_MAP = exports.INPUT_MODE = exports.INPUT_FILE = exports.INPUT_SCHEMA = void 0;
+const ghActions = __importStar(__nccwpck_require__(2186));
+const utils_1 = __nccwpck_require__(918);
+const errors_1 = __nccwpck_require__(9292);
+exports.INPUT_SCHEMA = "schema";
+exports.INPUT_FILE = "file";
+exports.INPUT_MODE = "mode";
+exports.INPUT_REF_SCHEMAS_MAP = "refSchemasMap";
+exports.INPUT_REF_SCHEMAS_ARRAY = "refSchemasArray";
+/**
+ * @throws InputsValidationError
+ */
+function getActionInputs() {
+    const errors = [];
+    const readInput = (readFn) => {
+        try {
+            return readFn();
+        }
+        catch (err) {
+            errors.push(err instanceof Error ? err.message : String(err));
+            return undefined;
+        }
+    };
+    const inputs = {
+        [exports.INPUT_SCHEMA]: readInput(getSchemaInput),
+        [exports.INPUT_FILE]: readInput(getFileInput),
+        [exports.INPUT_MODE]: readInput(getModeInput),
+        [exports.INPUT_REF_SCHEMAS_MAP]: readInput(getRefSchemasMapInput),
+        [exports.INPUT_REF_SCHEMAS_ARRAY]: readInput(getRefSchemasArrayInput)
+    };
+    if (errors.length > 0) {
+        throw new errors_1.InputsValidationError(errors);
+    }
+    return inputs;
+}
+exports.getActionInputs = getActionInputs;
+function getSchemaInput() {
+    return ghActions.getInput(exports.INPUT_SCHEMA, { required: false });
+}
+function getFileInput() {
+    return ghActions.getInput(exports.INPUT_FILE, { required: true });
+}
+function getModeInput() {
+    const mode = ghActions.getInput(exports.INPUT_MODE, { required: true });
+    const allowedModes = ['default', 'lax', 'strong'];
+    if (!allowedModes.includes(mode)) {
+        throw new Error(`"${exports.INPUT_MODE}" has unknown value "${mode}". Allowed values: ${allowedModes.join(', ')}`);
+    }
+    return mode;
+}
+function getRefSchemasMapInput() {
+    const refSchemasMapStr = ghActions.getInput(exports.INPUT_REF_SCHEMAS_MAP, { required: false });
+    if (!refSchemasMapStr) {
+        return new Map;
+    }
+    let refSchemasMap;
+    const invalidJsonErr = new Error(`${exports.INPUT_REF_SCHEMAS_MAP} should contain a valid {string: string} JSON object`);
+    try {
+        refSchemasMap = JSON.parse(refSchemasMapStr);
+    }
+    catch (err) {
+        throw invalidJsonErr;
+    }
+    if (!(0, utils_1.isObject)(refSchemasMap)) {
+        throw invalidJsonErr;
+    }
+    const res = new Map();
+    for (let key in refSchemasMap) {
+        if (typeof refSchemasMap[key] !== 'string') {
+            throw invalidJsonErr;
+        }
+        res.set(key, refSchemasMap[key]);
+    }
+    return res;
+}
+function getRefSchemasArrayInput() {
+    const refSchemasArrayStr = ghActions.getInput(exports.INPUT_REF_SCHEMAS_ARRAY, { required: false });
+    if (!refSchemasArrayStr) {
+        return [];
+    }
+    let refSchemas;
+    const invalidJsonErr = new Error(`${exports.INPUT_REF_SCHEMAS_ARRAY} should contain a valid strings array`);
+    try {
+        refSchemas = JSON.parse(refSchemasArrayStr);
+    }
+    catch (err) {
+        throw invalidJsonErr;
+    }
+    if (!Array.isArray(refSchemas)) {
+        throw invalidJsonErr;
+    }
+    return refSchemas;
+}
+//# sourceMappingURL=actionInputs.js.map
+
+/***/ }),
+
+/***/ 4633:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.actionOutputs = exports.OUTPUT_ERROR_TYPE = void 0;
+const ghActions = __importStar(__nccwpck_require__(2186));
+exports.OUTPUT_ERROR_TYPE = 'errorType';
+exports.actionOutputs = {
+    set [exports.OUTPUT_ERROR_TYPE](value) { ghActions.setOutput(exports.OUTPUT_ERROR_TYPE, value); },
+};
+//# sourceMappingURL=actionOutputs.js.map
+
+/***/ }),
+
 /***/ 9292:
 /***/ ((__unused_webpack_module, exports) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.SchemaValidatorError = void 0;
-class SchemaValidatorError extends Error {
-    constructor(errorType, message) {
-        super(message);
+exports.FileValidationError = exports.DataValidationError = exports.SchemaValidationError = exports.InputsValidationError = exports.ValidatorError = void 0;
+class ValidatorError extends Error {
+    constructor(errorType, errors, advice) {
+        super(`${errorType} error`);
         this.errorType = errorType;
+        this.errors = errors;
+        this.advice = advice;
     }
 }
-exports.SchemaValidatorError = SchemaValidatorError;
+exports.ValidatorError = ValidatorError;
+class InputsValidationError extends ValidatorError {
+    constructor(errors) {
+        super('inputs', errors);
+    }
+}
+exports.InputsValidationError = InputsValidationError;
+class SchemaValidationError extends ValidatorError {
+    constructor(error, advice) {
+        super('schema', [error], advice);
+    }
+}
+exports.SchemaValidationError = SchemaValidationError;
+class DataValidationError extends ValidatorError {
+    constructor(errors) {
+        super('validation', errors);
+    }
+}
+exports.DataValidationError = DataValidationError;
+class FileValidationError extends ValidatorError {
+    constructor(error) {
+        super('file', [error]);
+    }
+}
+exports.FileValidationError = FileValidationError;
 //# sourceMappingURL=errors.js.map
 
 /***/ }),
@@ -35,22 +395,11 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.getFilePaths = void 0;
-const glob_1 = __nccwpck_require__(1957);
+const glob_1 = __nccwpck_require__(9354);
 function getFilePaths(fileInput) {
     return __awaiter(this, void 0, void 0, function* () {
         const parts = fileInput.split('|');
-        const matchesPromises = [];
-        for (let part of parts) {
-            matchesPromises.push(new Promise((resolve, reject) => (0, glob_1.glob)(part, (err, matches) => {
-                if (err) {
-                    reject(err);
-                }
-                else {
-                    resolve(matches);
-                }
-            })));
-        }
-        const matches = yield Promise.all(matchesPromises);
+        const matches = yield Promise.all(parts.map(part => (0, glob_1.glob)(part)));
         return matches.flat();
     });
 }
@@ -100,140 +449,352 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.validate = exports.run = void 0;
+exports.validateFiles = exports.run = void 0;
 const ghActions = __importStar(__nccwpck_require__(2186));
-const fs = __importStar(__nccwpck_require__(5630));
-const utils_1 = __nccwpck_require__(918);
-const jsonschema_1 = __nccwpck_require__(3978);
-const yaml_1 = __importDefault(__nccwpck_require__(4083));
 const errors_1 = __nccwpck_require__(9292);
-const axios_1 = __importDefault(__nccwpck_require__(8757));
 const getFilePaths_1 = __nccwpck_require__(2254);
 const assert_1 = __importDefault(__nccwpck_require__(9491));
+const SchemaResolver_1 = __nccwpck_require__(564);
+const readDataFile_1 = __nccwpck_require__(1736);
+const schemasafeValidator_1 = __nccwpck_require__(3066);
+const actionOutputs_1 = __nccwpck_require__(4633);
+const actionInputs_1 = __nccwpck_require__(8366);
+const utils_1 = __nccwpck_require__(918);
 // noinspection JSUnusedLocalSymbols
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield validate(ghActions.getInput('schema', { required: false }), ghActions.getInput('file', { required: true }));
+            const inputs = (0, actionInputs_1.getActionInputs)();
+            yield validateFiles(inputs);
         }
         catch (error) {
-            if (error instanceof errors_1.SchemaValidatorError) {
-                ghActions.setOutput('errorType', error.errorType);
-            }
-            if (typeof error === 'string' || error instanceof Error) {
-                ghActions.setFailed(error.toString());
+            if (error instanceof errors_1.ValidatorError) {
+                actionOutputs_1.actionOutputs.errorType = error.errorType;
+                error.errors.forEach(error => ghActions.error(error));
+                if (error.advice) {
+                    ghActions.info(error.advice);
+                }
+                ghActions.setFailed('Failed because of ' + error.message);
             }
             else {
-                ghActions.setFailed('Unknown error');
+                ghActions.setFailed(error instanceof Error
+                    ? error.message
+                    : String(error));
             }
         }
     });
 }
 exports.run = run;
-function validate(schema, file) {
+function validateFiles(inputs) {
     return __awaiter(this, void 0, void 0, function* () {
-        const files = yield (0, getFilePaths_1.getFilePaths)(file);
+        const files = yield (0, getFilePaths_1.getFilePaths)(inputs.file);
         if (files.length === 0) {
-            throw new errors_1.SchemaValidatorError('file', 'No files found according to "file" input.');
+            throw new errors_1.FileValidationError('No files found according to "file" input.');
         }
-        let schemaObj;
-        if (schema) {
-            try {
-                schemaObj = readData(yield readSchemaContents(schema), schema);
-            }
-            catch (err) {
-                throw new errors_1.SchemaValidatorError('schema', 'Error reading schema. ' + err);
-            }
+        const schemaResolver = new SchemaResolver_1.SchemaResolver();
+        if (inputs.refSchemasMap.size > 0 || inputs.refSchemasArray.length > 0) {
+            ghActions.info('Resolving ref schemas passed to refSchemasMap and refSchemasArray inputs...');
+            schemaResolver.refSchemas = yield (0, SchemaResolver_1.resolveRefSchemas)(inputs.refSchemasMap, inputs.refSchemasArray);
         }
-        const validator = new jsonschema_1.Validator();
+        let resolvedSchema = inputs.schema
+            ? yield schemaResolver.resolve(inputs.schema)
+            : undefined;
         for (let filePath of files) {
-            const fileObject = yield readFile(filePath, !schema);
-            let fileSchemaObj = schemaObj || fileObject.schema;
-            (0, assert_1.default)(fileSchemaObj);
-            const result = validator.validate(fileObject.parsed, fileSchemaObj);
-            if (!result.valid) {
-                result.errors.forEach(error => ghActions.error(error.stack));
-                throw new errors_1.SchemaValidatorError('validation', 'Validation error');
+            const parsedData = yield (0, readDataFile_1.readAndParseFileData)(filePath);
+            if (!inputs.schema) {
+                const schemaId = (0, utils_1.getIdFromSchemaProperty)(parsedData);
+                ghActions.info(`"Trying to find '${schemaId}' schema from $schema property of the file...`);
+                resolvedSchema = yield schemaResolver.resolve(schemaId);
             }
+            (0, assert_1.default)(resolvedSchema !== undefined);
+            yield (0, schemasafeValidator_1.validateAgainstResolvedSchema)(parsedData, resolvedSchema, inputs.mode);
         }
         ghActions.info('Validated');
     });
 }
-exports.validate = validate;
-function readData(data, name) {
+exports.validateFiles = validateFiles;
+//# sourceMappingURL=main.js.map
+
+/***/ }),
+
+/***/ 4670:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.loadBuiltInMetaSchema = exports.hasBuiltInMetaSchema = void 0;
+const fs = __importStar(__nccwpck_require__(7147));
+const path = __importStar(__nccwpck_require__(1017));
+const errors_1 = __nccwpck_require__(9292);
+const utils_1 = __nccwpck_require__(918);
+const ResolvedSchema_1 = __nccwpck_require__(9386);
+// Move this file with care:
+// Tricky path resolving: should be valid for:
+// src/metaSchemas.ts
+// lib/metaSchemas.js
+// dist/index.js
+// All these files should be at the same level relating to metaSchemas dir
+const metaSchemasDir = path.resolve(__dirname, '../metaSchemas');
+const metaSchemasSchemasDir = path.join(metaSchemasDir, 'schemas');
+const schemaFilesJsonFile = path.join(metaSchemasDir, 'schema-files.json');
+const unexpectedMetaSchemaErrorAdvice = "Normally loading meta-schema from action local storage shouldn't fail, contact the author!";
+const metaSchemas = JSON.parse(fs.readFileSync(schemaFilesJsonFile).toString());
+function hasBuiltInMetaSchema(schemaId) {
+    return metaSchemas.hasOwnProperty(schemaId);
+}
+exports.hasBuiltInMetaSchema = hasBuiltInMetaSchema;
+function loadBuiltInMetaSchema(schemaId) {
+    return __awaiter(this, void 0, void 0, function* () {
+        schemaId = (0, utils_1.stripIdFragment)(schemaId);
+        const schemaInfo = metaSchemas[schemaId];
+        if (schemaInfo === undefined) {
+            return undefined;
+        }
+        let res;
+        try {
+            res = new ResolvedSchema_1.ResolvedSchema(yield loadMetaSchemaFromFile(schemaInfo.filePath));
+        }
+        catch (err) {
+            throw new errors_1.SchemaValidationError(`Error loading '${schemaId}' meta schema from '${schemaInfo.filePath}'`, unexpectedMetaSchemaErrorAdvice);
+        }
+        for (let ref of schemaInfo.refs) {
+            if (res.refSchemas.has(ref)) {
+                continue;
+            }
+            const resolved = yield loadBuiltInMetaSchema(ref);
+            if (resolved == undefined) {
+                throw new errors_1.SchemaValidationError(`can't resolve '${ref} ref in '${schemaId} meta schema'`, unexpectedMetaSchemaErrorAdvice);
+            }
+            res.refSchemas.set(ref, resolved.mainSchema);
+            for (let resolvedRef in resolved.refSchemas) {
+                res.refSchemas.set(resolvedRef, resolved.refSchemas.get(resolvedRef));
+            }
+        }
+        return res;
+    });
+}
+exports.loadBuiltInMetaSchema = loadBuiltInMetaSchema;
+function loadMetaSchemaFromFile(infoFilePath) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return JSON.parse((yield fs.promises.readFile(path.join(metaSchemasSchemasDir, infoFilePath))).toString());
+    });
+}
+//# sourceMappingURL=metaSchemas.js.map
+
+/***/ }),
+
+/***/ 8574:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parseObject = void 0;
+const yaml_1 = __importDefault(__nccwpck_require__(4083));
+const ghActions = __importStar(__nccwpck_require__(2186));
+function parseObject(data, name) {
     for (let parser of [
         { name: 'JSON', parse: (s) => JSON.parse(s) },
         { name: 'YAML', parse: (s) => yaml_1.default.parse(s) },
     ]) {
         try {
-            ghActions.info(`Parsing ${name} as ${parser.name}...`);
             const result = parser.parse(data);
-            ghActions.info(`Parsed to ${typeof result}`);
+            ghActions.info(`Contents of '${name}' has been parsed as ${parser.name} ${typeof result}`);
             return result;
         }
         catch (err) {
-            ghActions.info(`${name} is not a valid ${parser.name}`);
         }
     }
-    throw new Error(`${name} is not a valid JSON or YAML`);
+    throw new Error(`Contents of '${name}' aren't a valid JSON or YAML`);
 }
-function readFile(file, requireSchemaProperty) {
+exports.parseObject = parseObject;
+//# sourceMappingURL=parseObject.js.map
+
+/***/ }),
+
+/***/ 1736:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.readAndParseFileData = void 0;
+const parseObject_1 = __nccwpck_require__(8574);
+const fs = __importStar(__nccwpck_require__(5630));
+const errors_1 = __nccwpck_require__(9292);
+function readAndParseFileData(file) {
     return __awaiter(this, void 0, void 0, function* () {
-        let parsed;
         try {
-            parsed = readData((yield fs.readFile(file)).toString(), file);
+            return (0, parseObject_1.parseObject)((yield fs.readFile(file)).toString(), file);
         }
         catch (err) {
-            throw new errors_1.SchemaValidatorError('file', 'Error reading file. ' + err);
-        }
-        if (!requireSchemaProperty) {
-            return { parsed, schema: undefined };
-        }
-        (0, assert_1.default)(parsed != undefined);
-        if (typeof parsed !== 'object' ||
-            typeof parsed['$schema'] !== 'string') {
-            throw new errors_1.SchemaValidatorError('schema', `"schema" input is not set and $schema property is missing in ${file}`);
-        }
-        try {
-            ghActions.info(`"schema" input is not set, reading $schema = ` +
-                `"${parsed['$schema']} from ${file}"`);
-            const schema = readData(yield readSchemaContents(parsed['$schema']), parsed['$schema']);
-            return { parsed, schema };
-        }
-        catch (err) {
-            throw new errors_1.SchemaValidatorError('schema', 'Error reading schema. ' + err);
+            throw new errors_1.FileValidationError('Error reading file. ' + err);
         }
     });
 }
-function readSchemaContents(schemaPath) {
+exports.readAndParseFileData = readAndParseFileData;
+//# sourceMappingURL=readDataFile.js.map
+
+/***/ }),
+
+/***/ 3066:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.validateAgainstResolvedSchema = exports.ADD_EXTERNAL_SCHEMAS_ADVICE = exports.TRY_LAX_MODE_ADVICE = void 0;
+const schemasafe_1 = __nccwpck_require__(5580);
+const errors_1 = __nccwpck_require__(9292);
+exports.TRY_LAX_MODE_ADVICE = "Try running with mode: lax";
+exports.ADD_EXTERNAL_SCHEMAS_ADVICE = "Try passing schemas for not resolved refs manually via refSchemasMap or refSchemasArray inputs";
+function validateAgainstResolvedSchema(data, resolvedSchema, mode) {
     return __awaiter(this, void 0, void 0, function* () {
-        if ((0, utils_1.isValidHttpUrl)(schemaPath)) {
-            ghActions.info(`Loading schema from URL: ${schemaPath} ...`);
-            const response = yield axios_1.default.get(schemaPath, {
-                responseType: 'text',
-                transformResponse: res => res
+        let validate;
+        try {
+            validate = (0, schemasafe_1.validator)(resolvedSchema.mainSchema, {
+                mode,
+                schemas: resolvedSchema.refSchemas,
+                includeErrors: true,
+                allErrors: true
             });
-            ghActions.info(`${response.status}, ${response.headers['Content-Length']} bytes loaded, Content-Type: ` +
-                response.headers['Content-Type']);
-            return response.data;
         }
-        ghActions.info(`Loading schema from file: ${schemaPath} ...`);
-        const buffer = yield fs.readFile(schemaPath);
-        ghActions.info(`${buffer.length} bytes loaded`);
-        return buffer.toString();
+        catch (error) {
+            if (error instanceof Error) {
+                throw new errors_1.SchemaValidationError(error.message, getAdvice(error.message));
+            }
+            throw new errors_1.SchemaValidationError(String(error));
+        }
+        const res = validate(data);
+        if (!res) {
+            throw new errors_1.DataValidationError(validate.errors
+                ? validate.errors.map(err => `Invalid ${err.instanceLocation} (schema path: ${err.keywordLocation})`)
+                : []);
+        }
     });
 }
-//# sourceMappingURL=main.js.map
+exports.validateAgainstResolvedSchema = validateAgainstResolvedSchema;
+function getAdvice(errorMsg) {
+    errorMsg = errorMsg.toLowerCase();
+    if (errorMsg.startsWith('keyword not supported')) {
+        return exports.TRY_LAX_MODE_ADVICE;
+    }
+    if (errorMsg.startsWith('failed to resolve $ref')) {
+        return exports.ADD_EXTERNAL_SCHEMAS_ADVICE;
+    }
+}
+//# sourceMappingURL=schemasafeValidator.js.map
 
 /***/ }),
 
 /***/ 918:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.isValidHttpUrl = void 0;
+exports.stripIdFragment = exports.getIdFromSchemaProperty = exports.getSchemaId = exports.isObject = exports.isValidHttpUrl = void 0;
+const errors_1 = __nccwpck_require__(9292);
 function isValidHttpUrl(str) {
     try {
         const url = new URL(str);
@@ -244,6 +805,30 @@ function isValidHttpUrl(str) {
     }
 }
 exports.isValidHttpUrl = isValidHttpUrl;
+function isObject(value) {
+    const type = typeof value;
+    return type === 'object' && !!value;
+}
+exports.isObject = isObject;
+function getSchemaId(schema) {
+    return schema['$id'] || schema['id'];
+}
+exports.getSchemaId = getSchemaId;
+function getIdFromSchemaProperty(data) {
+    if (typeof data !== 'object' ||
+        typeof data['$schema'] !== 'string') {
+        throw new errors_1.SchemaValidationError(`$schema property is missing in the file`);
+    }
+    return data['$schema'];
+}
+exports.getIdFromSchemaProperty = getIdFromSchemaProperty;
+function stripIdFragment(id) {
+    const fragmentSignIndex = id.indexOf('#');
+    return fragmentSignIndex !== -1
+        ? id.substring(0, fragmentSignIndex)
+        : id;
+}
+exports.stripIdFragment = stripIdFragment;
 //# sourceMappingURL=utils.js.map
 
 /***/ }),
@@ -2006,6 +2591,2606 @@ function checkBypass(reqUrl) {
 }
 exports.checkBypass = checkBypass;
 //# sourceMappingURL=proxy.js.map
+
+/***/ }),
+
+/***/ 4342:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+const { format, safe, safeand, safenot, safenotor } = __nccwpck_require__(2944)
+const genfun = __nccwpck_require__(6551)
+const { resolveReference, joinPath, getDynamicAnchors, hasKeywords } = __nccwpck_require__(7000)
+const formats = __nccwpck_require__(107)
+const { toPointer, ...functions } = __nccwpck_require__(1150)
+const { scopeMethods } = __nccwpck_require__(7623)
+const { buildName, types, jsHelpers } = __nccwpck_require__(3314)
+const { knownKeywords, schemaVersions, knownVocabularies } = __nccwpck_require__(2139)
+const { initTracing, andDelta, orDelta, applyDelta, isDynamic, inProperties } = __nccwpck_require__(926)
+
+const noopRegExps = new Set(['^[\\s\\S]*$', '^[\\S\\s]*$', '^[^]*$', '', '.*', '^', '$'])
+const primitiveTypes = ['null', 'boolean', 'number', 'integer', 'string']
+
+// for checking schema parts in consume()
+const schemaTypes = new Map(
+  Object.entries({
+    boolean: (arg) => typeof arg === 'boolean',
+    array: (arg) => Array.isArray(arg) && Object.getPrototypeOf(arg) === Array.prototype,
+    object: (arg) => arg && Object.getPrototypeOf(arg) === Object.prototype,
+    finite: (arg) => Number.isFinite(arg),
+    natural: (arg) => Number.isInteger(arg) && arg >= 0,
+    string: (arg) => typeof arg === 'string',
+    jsonval: (arg) => functions.deepEqual(arg, JSON.parse(JSON.stringify(arg))),
+  })
+)
+const isPlainObject = schemaTypes.get('object')
+const isSchemaish = (arg) => isPlainObject(arg) || typeof arg === 'boolean'
+
+const schemaIsOlderThan = ($schema, ver) =>
+  schemaVersions.indexOf($schema) > schemaVersions.indexOf(`https://json-schema.org/${ver}/schema`)
+
+// Helper methods for semi-structured paths
+const propvar = (parent, keyname, inKeys = false, number = false) =>
+  Object.freeze({ parent, keyname, inKeys, number }) // property by variable
+const propimm = (parent, keyval, checked = false) => Object.freeze({ parent, keyval, checked }) // property by immediate value
+
+const evaluatedStatic = Symbol('evaluatedStatic')
+const optDynamic = Symbol('optDynamic')
+const optDynAnchors = Symbol('optDynAnchors')
+const optRecAnchors = Symbol('optRecAnchors')
+
+const constantValue = (schema) => {
+  if (typeof schema === 'boolean') return schema
+  if (isPlainObject(schema) && Object.keys(schema).length === 0) return true
+  return undefined
+}
+
+const rootMeta = new WeakMap()
+const generateMeta = (root, $schema, enforce, requireSchema) => {
+  if ($schema) {
+    const version = $schema.replace(/^http:\/\//, 'https://').replace(/#$/, '')
+    enforce(schemaVersions.includes(version), 'Unexpected schema version:', version)
+    rootMeta.set(root, {
+      exclusiveRefs: schemaIsOlderThan(version, 'draft/2019-09'),
+      contentValidation: schemaIsOlderThan(version, 'draft/2019-09'),
+      dependentUnsupported: schemaIsOlderThan(version, 'draft/2019-09'),
+      newItemsSyntax: !schemaIsOlderThan(version, 'draft/2020-12'),
+      containsEvaluates: !schemaIsOlderThan(version, 'draft/2020-12'),
+      objectContains: !schemaIsOlderThan(version, 'draft/next'),
+      bookending: schemaIsOlderThan(version, 'draft/next'),
+    })
+  } else {
+    enforce(!requireSchema, '[requireSchema] $schema is required')
+    rootMeta.set(root, {})
+  }
+}
+
+const compileSchema = (schema, root, opts, scope, basePathRoot = '') => {
+  const {
+    mode = 'default',
+    useDefaults = false,
+    removeAdditional = false, // supports additionalProperties: false and additionalItems: false
+    includeErrors = false,
+    allErrors = false,
+    contentValidation,
+    dryRun, // unused, just for rest siblings
+    allowUnusedKeywords = opts.mode === 'lax',
+    allowUnreachable = opts.mode === 'lax',
+    requireSchema = opts.mode === 'strong',
+    requireValidation = opts.mode === 'strong',
+    requireStringValidation = opts.mode === 'strong',
+    forbidNoopValues = opts.mode === 'strong', // e.g. $recursiveAnchor: false (it's false by default)
+    complexityChecks = opts.mode === 'strong',
+    unmodifiedPrototypes = false, // assumes no mangled Object/Array prototypes
+    isJSON = false, // assume input to be JSON, which e.g. makes undefined impossible
+    $schemaDefault = null,
+    formats: optFormats = {},
+    weakFormats = opts.mode !== 'strong',
+    extraFormats = false,
+    schemas, // always a Map, produced at wrapper
+    ...unknown
+  } = opts
+  const fmts = {
+    ...formats.core,
+    ...(weakFormats ? formats.weak : {}),
+    ...(extraFormats ? formats.extra : {}),
+    ...optFormats,
+  }
+  if (Object.keys(unknown).length !== 0)
+    throw new Error(`Unknown options: ${Object.keys(unknown).join(', ')}`)
+
+  if (!['strong', 'lax', 'default'].includes(mode)) throw new Error(`Invalid mode: ${mode}`)
+  if (!includeErrors && allErrors) throw new Error('allErrors requires includeErrors to be enabled')
+  if (requireSchema && $schemaDefault) throw new Error('requireSchema forbids $schemaDefault')
+  if (mode === 'strong') {
+    const strong = { requireValidation, requireStringValidation, complexityChecks, requireSchema }
+    const weak = { weakFormats, allowUnusedKeywords }
+    for (const [k, v] of Object.entries(strong)) if (!v) throw new Error(`Strong mode demands ${k}`)
+    for (const [k, v] of Object.entries(weak)) if (v) throw new Error(`Strong mode forbids ${k}`)
+  }
+
+  const { gensym, getref, genref, genformat } = scopeMethods(scope)
+
+  const buildPath = (prop) => {
+    const path = []
+    let curr = prop
+    while (curr) {
+      if (!curr.name) path.unshift(curr)
+      curr = curr.parent || curr.errorParent
+    }
+
+    // fast case when there are no variables inside path
+    if (path.every((part) => part.keyval !== undefined))
+      return format('%j', toPointer(path.map((part) => part.keyval)))
+
+    // Be very careful while refactoring, this code significantly affects includeErrors performance
+    // It attempts to construct fast code presentation for paths, e.g. "#/abc/"+pointerPart(key0)+"/items/"+i0
+    const stringParts = ['#']
+    const stringJoined = () => {
+      const value = stringParts.map(functions.pointerPart).join('/')
+      stringParts.length = 0
+      return value
+    }
+    let res = null
+    for (const { keyname, keyval, number } of path) {
+      if (keyname) {
+        if (!number) scope.pointerPart = functions.pointerPart
+        const value = number ? keyname : format('pointerPart(%s)', keyname)
+        const str = `${stringJoined()}/`
+        res = res ? format('%s+%j+%s', res, str, value) : format('%j+%s', str, value)
+      } else if (keyval) stringParts.push(keyval)
+    }
+    return stringParts.length > 0 ? format('%s+%j', res, `/${stringJoined()}`) : res
+  }
+
+  const funname = genref(schema)
+  let validate = null // resolve cyclic dependencies
+  const wrap = (...args) => {
+    const res = validate(...args)
+    wrap.errors = validate.errors
+    return res
+  }
+  scope[funname] = wrap
+
+  const hasRefs = hasKeywords(schema, ['$ref', '$recursiveRef', '$dynamicRef'])
+  const hasDynAnchors = opts[optDynAnchors] && hasRefs && hasKeywords(schema, ['$dynamicAnchor'])
+  const dynAnchorsHead = () => {
+    if (!opts[optDynAnchors]) return format('')
+    return hasDynAnchors ? format(', dynAnchors = []') : format(', dynAnchors')
+  }
+  const recAnchorsHead = opts[optRecAnchors] ? format(', recursive') : format('')
+
+  const fun = genfun()
+  fun.write('function validate(data%s%s) {', recAnchorsHead, dynAnchorsHead())
+  if (includeErrors) fun.write('validate.errors = null')
+  if (allErrors) fun.write('let errorCount = 0')
+  if (opts[optDynamic]) fun.write('validate.evaluatedDynamic = null')
+
+  let dynamicAnchorsNext = opts[optDynAnchors] ? format(', dynAnchors') : format('')
+  if (hasDynAnchors) {
+    fun.write('const dynLocal = [{}]')
+    dynamicAnchorsNext = format(', [...dynAnchors, dynLocal[0] || []]')
+  }
+
+  const helpers = jsHelpers(fun, scope, propvar, { unmodifiedPrototypes, isJSON }, noopRegExps)
+  const { present, forObjectKeys, forArray, patternTest, compare } = helpers
+
+  const recursiveLog = []
+  const getMeta = () => rootMeta.get(root)
+  const basePathStack = basePathRoot ? [basePathRoot] : []
+  const visit = (errors, history, current, node, schemaPath, trace = {}, { constProp } = {}) => {
+    // e.g. top-level data and property names, OR already checked by present() in history, OR in keys and not undefined
+    const isSub = history.length > 0 && history[history.length - 1].prop === current
+    const queryCurrent = () => history.filter((h) => h.prop === current)
+    const definitelyPresent =
+      !current.parent || current.checked || (current.inKeys && isJSON) || queryCurrent().length > 0
+
+    const name = buildName(current)
+    const currPropImm = (...args) => propimm(current, ...args)
+
+    const error = ({ path = [], prop = current, source, suberr }) => {
+      const schemaP = toPointer([...schemaPath, ...path])
+      const dataP = includeErrors ? buildPath(prop) : null
+      if (includeErrors === true && errors && source) {
+        // we can include absoluteKeywordLocation later, perhaps
+        scope.errorMerge = functions.errorMerge
+        const args = [source, schemaP, dataP]
+        if (allErrors) {
+          fun.write('if (validate.errors === null) validate.errors = []')
+          fun.write('validate.errors.push(...%s.map(e => errorMerge(e, %j, %s)))', ...args)
+        } else fun.write('validate.errors = [errorMerge(%s[0], %j, %s)]', ...args)
+      } else if (includeErrors === true && errors) {
+        const errorJS = format('{ keywordLocation: %j, instanceLocation: %s }', schemaP, dataP)
+        if (allErrors) {
+          fun.write('if (%s === null) %s = []', errors, errors)
+          fun.write('%s.push(%s)', errors, errorJS)
+        } else fun.write('%s = [%s]', errors, errorJS) // Array assignment is significantly faster, do not refactor the two branches
+      }
+      if (suberr) mergeerror(suberr) // can only happen in allErrors
+      if (allErrors) fun.write('errorCount++')
+      else fun.write('return false')
+    }
+    const errorIf = (condition, errorArgs) => fun.if(condition, () => error(errorArgs))
+
+    const fail = (msg, value) => {
+      const comment = value !== undefined ? ` ${JSON.stringify(value)}` : ''
+      throw new Error(`${msg}${comment} at ${joinPath(basePathRoot, toPointer(schemaPath))}`)
+    }
+    const enforce = (ok, ...args) => ok || fail(...args)
+    const laxMode = (ok, ...args) => enforce(mode === 'lax' || ok, ...args)
+    const enforceMinMax = (a, b) => laxMode(!(node[b] < node[a]), `Invalid ${a} / ${b} combination`)
+    const enforceValidation = (msg, suffix = 'should be specified') =>
+      enforce(!requireValidation, `[requireValidation] ${msg} ${suffix}`)
+    const subPath = (...args) => [...schemaPath, ...args]
+    const uncertain = (msg) =>
+      enforce(!removeAdditional && !useDefaults, `[removeAdditional/useDefaults] uncertain: ${msg}`)
+    const complex = (msg, arg) => enforce(!complexityChecks, `[complexityChecks] ${msg}`, arg)
+    const saveMeta = ($sch) => generateMeta(root, $sch || $schemaDefault, enforce, requireSchema)
+
+    // evaluated tracing
+    const stat = initTracing()
+    const evaluateDelta = (delta) => applyDelta(stat, delta)
+
+    if (typeof node === 'boolean') {
+      if (node === true) {
+        enforceValidation('schema = true', 'is not allowed') // any is valid here
+        return { stat } // nothing is evaluated for true
+      }
+      errorIf(definitelyPresent || current.inKeys ? true : present(current), {}) // node === false
+      evaluateDelta({ type: [] }) // everything is evaluated for false
+      return { stat }
+    }
+
+    enforce(isPlainObject(node), 'Schema is not an object')
+    for (const key of Object.keys(node))
+      enforce(knownKeywords.includes(key) || allowUnusedKeywords, 'Keyword not supported:', key)
+
+    if (Object.keys(node).length === 0) {
+      enforceValidation('empty rules node', 'is not allowed')
+      return { stat } // nothing to validate here, basically the same as node === true
+    }
+
+    const unused = new Set(Object.keys(node))
+    const multiConsumable = new Set()
+    const consume = (prop, ...ruleTypes) => {
+      enforce(multiConsumable.has(prop) || unused.has(prop), 'Unexpected double consumption:', prop)
+      enforce(functions.hasOwn(node, prop), 'Is not an own property:', prop)
+      enforce(ruleTypes.every((t) => schemaTypes.has(t)), 'Invalid type used in consume')
+      enforce(ruleTypes.some((t) => schemaTypes.get(t)(node[prop])), 'Unexpected type for', prop)
+      unused.delete(prop)
+    }
+    const get = (prop, ...ruleTypes) => {
+      if (node[prop] !== undefined) consume(prop, ...ruleTypes)
+      return node[prop]
+    }
+    const handle = (prop, ruleTypes, handler, errorArgs = {}) => {
+      if (node[prop] === undefined) return false
+      // opt-out on null is explicit in both places here, don't set default
+      consume(prop, ...ruleTypes)
+      if (handler !== null) {
+        const condition = handler(node[prop])
+        if (condition !== null) errorIf(condition, { path: [prop], ...errorArgs })
+      }
+      return true
+    }
+
+    if (node === root) {
+      saveMeta(get('$schema', 'string'))
+      handle('$vocabulary', ['object'], ($vocabulary) => {
+        for (const [vocab, flag] of Object.entries($vocabulary)) {
+          if (flag === false) continue
+          enforce(flag === true && knownVocabularies.includes(vocab), 'Unknown vocabulary:', vocab)
+        }
+        return null
+      })
+    } else if (!getMeta()) saveMeta(root.$schema)
+
+    if (getMeta().objectContains) {
+      // When object contains is enabled, contains-related keywords can be consumed two times: in object branch and in array branch
+      for (const prop of ['contains', 'minContains', 'maxContains']) multiConsumable.add(prop)
+    }
+
+    handle('examples', ['array'], null) // unused, meta-only
+    handle('example', ['jsonval'], null) // unused, meta-only, OpenAPI
+    for (const ignore of ['title', 'description', '$comment']) handle(ignore, ['string'], null) // unused, meta-only strings
+    for (const ignore of ['deprecated', 'readOnly', 'writeOnly']) handle(ignore, ['boolean'], null) // unused, meta-only flags
+
+    handle('$defs', ['object'], null) || handle('definitions', ['object'], null) // defs are allowed, those are validated on usage
+
+    const compileSub = (sub, subR, path) =>
+      sub === schema ? safe('validate') : getref(sub) || compileSchema(sub, subR, opts, scope, path)
+    const basePath = () => (basePathStack.length > 0 ? basePathStack[basePathStack.length - 1] : '')
+    const basePathStackLength = basePathStack.length // to restore at exit
+    const setId = ($id) => {
+      basePathStack.push(joinPath(basePath(), $id))
+      return null
+    }
+
+    // None of the below should be handled if an exlusive pre-2019-09 $ref is present
+    if (!getMeta().exclusiveRefs || !node.$ref) {
+      handle('$id', ['string'], setId) || handle('id', ['string'], setId)
+      handle('$anchor', ['string'], null) // $anchor is used only for ref resolution, on usage
+      handle('$dynamicAnchor', ['string'], null) // handled separately and on ref resolution
+
+      if (node.$recursiveAnchor || !forbidNoopValues) {
+        handle('$recursiveAnchor', ['boolean'], (isRecursive) => {
+          if (isRecursive) recursiveLog.push([node, root, basePath()])
+          return null
+        })
+      }
+    }
+
+    // handle schema-wide dynamic anchors
+    const isDynScope = hasDynAnchors && (node === schema || node.id || node.$id)
+    if (isDynScope) {
+      const allDynamic = getDynamicAnchors(node)
+      if (node !== schema) fun.write('dynLocal.unshift({})') // inlined at top level
+      for (const [key, subcheck] of allDynamic) {
+        const resolved = resolveReference(root, schemas, `#${key}`, basePath())
+        const [sub, subRoot, path] = resolved[0] || []
+        enforce(sub === subcheck, `Unexpected $dynamicAnchor resolution: ${key}`)
+        const n = compileSub(sub, subRoot, path)
+        fun.write('dynLocal[0][%j] = %s', `#${key}`, n)
+      }
+    }
+
+    // evaluated: declare dynamic
+    const needUnevaluated = (rule) =>
+      opts[optDynamic] && (node[rule] || node[rule] === false || node === schema)
+    const local = Object.freeze({
+      item: needUnevaluated('unevaluatedItems') ? gensym('evaluatedItem') : null,
+      items: needUnevaluated('unevaluatedItems') ? gensym('evaluatedItems') : null,
+      props: needUnevaluated('unevaluatedProperties') ? gensym('evaluatedProps') : null,
+    })
+    const dyn = Object.freeze({
+      item: local.item || trace.item,
+      items: local.items || trace.items,
+      props: local.props || trace.props,
+    })
+    const canSkipDynamic = () =>
+      (!dyn.items || stat.items === Infinity) && (!dyn.props || stat.properties.includes(true))
+    const evaluateDeltaDynamic = (delta) => {
+      // Skips applying those that have already been proved statically
+      if (dyn.item && delta.item && stat.items !== Infinity)
+        fun.write('%s.push(%s)', dyn.item, delta.item)
+      if (dyn.items && delta.items > stat.items) fun.write('%s.push(%d)', dyn.items, delta.items)
+      if (dyn.props && (delta.properties || []).includes(true) && !stat.properties.includes(true)) {
+        fun.write('%s[0].push(true)', dyn.props)
+      } else if (dyn.props) {
+        const inStat = (properties, patterns) => inProperties(stat, { properties, patterns })
+        const properties = (delta.properties || []).filter((x) => !inStat([x], []))
+        const patterns = (delta.patterns || []).filter((x) => !inStat([], [x]))
+        if (properties.length > 0) fun.write('%s[0].push(...%j)', dyn.props, properties)
+        if (patterns.length > 0) fun.write('%s[1].push(...%j)', dyn.props, patterns)
+        for (const sym of delta.propertiesVars || []) fun.write('%s[0].push(%s)', dyn.props, sym)
+      }
+    }
+    const applyDynamicToDynamic = (target, item, items, props) => {
+      if (isDynamic(stat).items && target.item && item)
+        fun.write('%s.push(...%s)', target.item, item)
+      if (isDynamic(stat).items && target.items && items)
+        fun.write('%s.push(...%s)', target.items, items)
+      if (isDynamic(stat).properties && target.props && props) {
+        fun.write('%s[0].push(...%s[0])', target.props, props)
+        fun.write('%s[1].push(...%s[1])', target.props, props)
+      }
+    }
+
+    const makeRecursive = () => {
+      if (!opts[optRecAnchors]) return format('') // recursive anchors disabled
+      if (recursiveLog.length === 0) return format(', recursive') // no recursive default, i.e. no $recursiveAnchor has been set in this schema
+      return format(', recursive || %s', compileSub(...recursiveLog[0]))
+    }
+    const applyRef = (n, errorArgs) => {
+      // evaluated: propagate static from ref to current, skips cyclic.
+      // Can do this before the call as the call is just a write
+      const delta = (scope[n] && scope[n][evaluatedStatic]) || { unknown: true } // assume unknown if ref is cyclic
+      evaluateDelta(delta)
+      const call = format('%s(%s%s%s)', n, name, makeRecursive(), dynamicAnchorsNext)
+      if (!includeErrors && canSkipDynamic()) return format('!%s', call) // simple case
+      const res = gensym('res')
+      const err = gensym('err') // Save and restore errors in case of recursion (if needed)
+      const suberr = gensym('suberr')
+      if (includeErrors) fun.write('const %s = validate.errors', err)
+      fun.write('const %s = %s', res, call)
+      if (includeErrors) fun.write('const %s = %s.errors', suberr, n)
+      if (includeErrors) fun.write('validate.errors = %s', err)
+      errorIf(safenot(res), { ...errorArgs, source: suberr })
+      // evaluated: propagate dynamic from ref to current
+      fun.if(res, () => {
+        const item = isDynamic(delta).items ? format('%s.evaluatedDynamic[0]', n) : null
+        const items = isDynamic(delta).items ? format('%s.evaluatedDynamic[1]', n) : null
+        const props = isDynamic(delta).properties ? format('%s.evaluatedDynamic[2]', n) : null
+        applyDynamicToDynamic(dyn, item, items, props)
+      })
+
+      return null
+    }
+
+    /* Preparation and methods, post-$ref validation will begin at the end of the function */
+
+    // This is used for typechecks, null means * here
+    const allIn = (arr, valid) => arr && arr.every((s) => valid.includes(s)) // all arr entries are in valid
+    const someIn = (arr, possible) => possible.some((x) => arr === null || arr.includes(x)) // all possible are in arrs
+
+    const parentCheckedType = (...valid) => queryCurrent().some((h) => allIn(h.stat.type, valid))
+    const definitelyType = (...valid) => allIn(stat.type, valid) || parentCheckedType(...valid)
+    const typeApplicable = (...possible) =>
+      someIn(stat.type, possible) && queryCurrent().every((h) => someIn(h.stat.type, possible))
+
+    const enforceRegex = (source, target = node) => {
+      enforce(typeof source === 'string', 'Invalid pattern:', source)
+      if (requireValidation || requireStringValidation)
+        enforce(/^\^.*\$$/.test(source), 'Should start with ^ and end with $:', source)
+      if (/([{+*].*[{+*]|\)[{+*]|^[^^].*[{+*].)/.test(source) && target.maxLength === undefined)
+        complex('maxLength should be specified for pattern:', source)
+    }
+
+    // Those checks will need to be skipped if another error is set in this block before those ones
+    const havePattern = node.pattern && !noopRegExps.has(node.pattern) // we won't generate code for noop
+    const haveComplex = node.uniqueItems || havePattern || node.patternProperties || node.format
+    const prev = allErrors && haveComplex ? gensym('prev') : null
+    const prevWrap = (shouldWrap, writeBody) =>
+      fun.if(shouldWrap && prev !== null ? format('errorCount === %s', prev) : true, writeBody)
+
+    const nexthistory = () => [...history, { stat, prop: current }]
+    // Can not be used before undefined check! The one performed by present()
+    const rule = (...args) => visit(errors, nexthistory(), ...args).stat
+    const subrule = (suberr, ...args) => {
+      if (args[0] === current) {
+        const constval = constantValue(args[1])
+        if (constval === true) return { sub: format('true'), delta: {} }
+        if (constval === false) return { sub: format('false'), delta: { type: [] } }
+      }
+      const sub = gensym('sub')
+      fun.write('const %s = (() => {', sub)
+      if (allErrors) fun.write('let errorCount = 0') // scoped error counter
+      const { stat: delta } = visit(suberr, nexthistory(), ...args)
+      if (allErrors) {
+        fun.write('return errorCount === 0')
+      } else fun.write('return true')
+      fun.write('})()')
+      return { sub, delta }
+    }
+
+    const suberror = () => {
+      const suberr = includeErrors && allErrors ? gensym('suberr') : null
+      if (suberr) fun.write('let %s = null', suberr)
+      return suberr
+    }
+    const mergeerror = (suberr) => {
+      if (errors === null || suberr === null) return // suberror can be null e.g. on failed empty contains, errors can be null in e.g. not or if
+      fun.if(suberr, () => fun.write('%s.push(...%s)', errors, suberr))
+    }
+
+    // Extracted single additional(Items/Properties) rules, for reuse with unevaluated(Items/Properties)
+    const willRemoveAdditional = () => {
+      if (!removeAdditional) return false
+      if (removeAdditional === true) return true
+      if (removeAdditional === 'keyword') {
+        if (!node.removeAdditional) return false
+        consume('removeAdditional', 'boolean')
+        return true
+      }
+      throw new Error(`Invalid removeAdditional: ${removeAdditional}`)
+    }
+    const additionalItems = (rulePath, limit, extra) => {
+      const handled = handle(rulePath, ['object', 'boolean'], (ruleValue) => {
+        if (ruleValue === false && willRemoveAdditional()) {
+          fun.write('if (%s.length > %s) %s.length = %s', name, limit, name, limit)
+          return null
+        }
+        if (ruleValue === false && !extra) return format('%s.length > %s', name, limit)
+        forArray(current, limit, (prop, i) => {
+          if (extra) fun.write('if (%s) continue', extra(i))
+          return rule(prop, ruleValue, subPath(rulePath))
+        })
+        return null
+      })
+      if (handled) evaluateDelta({ items: Infinity })
+    }
+    const additionalProperties = (rulePath, condition) => {
+      const handled = handle(rulePath, ['object', 'boolean'], (ruleValue) => {
+        forObjectKeys(current, (sub, key) => {
+          fun.if(condition(key), () => {
+            if (ruleValue === false && willRemoveAdditional()) fun.write('delete %s[%s]', name, key)
+            else rule(sub, ruleValue, subPath(rulePath))
+          })
+        })
+        return null
+      })
+      if (handled) evaluateDelta({ properties: [true] })
+    }
+    const additionalCondition = (key, properties, patternProperties) =>
+      safeand(
+        ...properties.map((p) => format('%s !== %j', key, p)),
+        ...patternProperties.map((p) => safenot(patternTest(p, key)))
+      )
+    const lintRequired = (properties, patterns) => {
+      const regexps = patterns.map((p) => new RegExp(p, 'u'))
+      const known = (key) => properties.includes(key) || regexps.some((r) => r.test(key))
+      for (const key of stat.required) enforce(known(key), `Unknown required property:`, key)
+    }
+    const finalLint = []
+
+    /* Checks inside blocks are independent, they are happening on the same code depth */
+
+    const checkNumbers = () => {
+      const minMax = (value, operator) => format('!(%d %c %s)', value, operator, name) // don't remove negation, accounts for NaN
+
+      if (Number.isFinite(node.exclusiveMinimum)) {
+        handle('exclusiveMinimum', ['finite'], (min) => minMax(min, '<'))
+      } else {
+        handle('minimum', ['finite'], (min) => minMax(min, node.exclusiveMinimum ? '<' : '<='))
+        handle('exclusiveMinimum', ['boolean'], null) // handled above
+      }
+
+      if (Number.isFinite(node.exclusiveMaximum)) {
+        handle('exclusiveMaximum', ['finite'], (max) => minMax(max, '>'))
+        enforceMinMax('minimum', 'exclusiveMaximum')
+        enforceMinMax('exclusiveMinimum', 'exclusiveMaximum')
+      } else if (node.maximum !== undefined) {
+        handle('maximum', ['finite'], (max) => minMax(max, node.exclusiveMaximum ? '>' : '>='))
+        handle('exclusiveMaximum', ['boolean'], null) // handled above
+        enforceMinMax('minimum', 'maximum')
+        enforceMinMax('exclusiveMinimum', 'maximum')
+      }
+
+      const multipleOf = node.multipleOf === undefined ? 'divisibleBy' : 'multipleOf' // draft3 support
+      handle(multipleOf, ['finite'], (value) => {
+        enforce(value > 0, `Invalid ${multipleOf}:`, value)
+        const [frac, exp] = `${value}.`.split('.')[1].split('e-')
+        const e = frac.length + (exp ? Number(exp) : 0)
+        if (Number.isInteger(value * 2 ** e)) return format('%s %% %d !== 0', name, value) // exact
+        scope.isMultipleOf = functions.isMultipleOf
+        const args = [name, value, e, Math.round(value * Math.pow(10, e))] // precompute for performance
+        return format('!isMultipleOf(%s, %d, 1e%d, %d)', ...args)
+      })
+    }
+
+    const checkStrings = () => {
+      handle('maxLength', ['natural'], (max) => {
+        scope.stringLength = functions.stringLength
+        return format('%s.length > %d && stringLength(%s) > %d', name, max, name, max)
+      })
+      handle('minLength', ['natural'], (min) => {
+        scope.stringLength = functions.stringLength
+        return format('%s.length < %d || stringLength(%s) < %d', name, min, name, min)
+      })
+      enforceMinMax('minLength', 'maxLength')
+
+      prevWrap(true, () => {
+        const checkFormat = (fmtname, target, formatsObj = fmts) => {
+          const known = typeof fmtname === 'string' && functions.hasOwn(formatsObj, fmtname)
+          enforce(known, 'Unrecognized format used:', fmtname)
+          const formatImpl = formatsObj[fmtname]
+          const valid = formatImpl instanceof RegExp || typeof formatImpl === 'function'
+          enforce(valid, 'Invalid format used:', fmtname)
+          if (formatImpl instanceof RegExp) {
+            // built-in formats are fine, check only ones from options
+            if (functions.hasOwn(optFormats, fmtname)) enforceRegex(formatImpl.source)
+            return format('!%s.test(%s)', genformat(formatImpl), target)
+          }
+          return format('!%s(%s)', genformat(formatImpl), target)
+        }
+
+        handle('format', ['string'], (value) => {
+          evaluateDelta({ fullstring: true })
+          return checkFormat(value, name)
+        })
+
+        handle('pattern', ['string'], (pattern) => {
+          enforceRegex(pattern)
+          evaluateDelta({ fullstring: true })
+          return noopRegExps.has(pattern) ? null : safenot(patternTest(pattern, name))
+        })
+
+        enforce(node.contentSchema !== false, 'contentSchema cannot be set to false')
+        const cV = contentValidation === undefined ? getMeta().contentValidation : contentValidation
+        const haveContent = node.contentEncoding || node.contentMediaType || node.contentSchema
+        const contentErr =
+          '"content*" keywords are disabled by default per spec, enable with { contentValidation = true } option (see doc/Options.md for more info)'
+        enforce(!haveContent || cV || allowUnusedKeywords, contentErr)
+        if (haveContent && cV) {
+          const dec = gensym('dec')
+          if (node.contentMediaType) fun.write('let %s = %s', dec, name)
+
+          if (node.contentEncoding === 'base64') {
+            errorIf(checkFormat('base64', name, formats.extra), { path: ['contentEncoding'] })
+            if (node.contentMediaType) {
+              scope.deBase64 = functions.deBase64
+              fun.write('try {')
+              fun.write('%s = deBase64(%s)', dec, dec)
+            }
+            consume('contentEncoding', 'string')
+          } else enforce(!node.contentEncoding, 'Unknown contentEncoding:', node.contentEncoding)
+
+          let json = false
+          if (node.contentMediaType === 'application/json') {
+            fun.write('try {')
+            fun.write('%s = JSON.parse(%s)', dec, dec)
+            json = true
+            consume('contentMediaType', 'string')
+          } else enforce(!node.contentMediaType, 'Unknown contentMediaType:', node.contentMediaType)
+
+          if (node.contentSchema) {
+            enforce(json, 'contentSchema requires contentMediaType application/json')
+            const decprop = Object.freeze({ name: dec, errorParent: current })
+            rule(decprop, node.contentSchema, subPath('contentSchema')) // TODO: isJSON true for speed?
+            consume('contentSchema', 'object', 'array')
+            evaluateDelta({ fullstring: true })
+          }
+          if (node.contentMediaType) {
+            fun.write('} catch (e) {')
+            error({ path: ['contentMediaType'] })
+            fun.write('}')
+            if (node.contentEncoding) {
+              fun.write('} catch (e) {')
+              error({ path: ['contentEncoding'] })
+              fun.write('}')
+            }
+          }
+        }
+      })
+    }
+
+    const checkArrays = () => {
+      handle('maxItems', ['natural'], (max) => {
+        const prefixItemsName = getMeta().newItemsSyntax ? 'prefixItems' : 'items'
+        if (Array.isArray(node[prefixItemsName]) && node[prefixItemsName].length > max)
+          fail(`Invalid maxItems: ${max} is less than ${prefixItemsName} array length`)
+        return format('%s.length > %d', name, max)
+      })
+      handle('minItems', ['natural'], (min) => format('%s.length < %d', name, min)) // can be higher that .items length with additionalItems
+      enforceMinMax('minItems', 'maxItems')
+
+      const checkItemsArray = (items) => {
+        for (let p = 0; p < items.length; p++) rule(currPropImm(p), items[p], subPath(`${p}`))
+        evaluateDelta({ items: items.length })
+        return null
+      }
+      if (getMeta().newItemsSyntax) {
+        handle('prefixItems', ['array'], checkItemsArray)
+        additionalItems('items', format('%d', (node.prefixItems || []).length))
+      } else if (Array.isArray(node.items)) {
+        handle('items', ['array'], checkItemsArray)
+        additionalItems('additionalItems', format('%d', node.items.length))
+      } else {
+        handle('items', ['object', 'boolean'], (items) => {
+          forArray(current, format('0'), (prop) => rule(prop, items, subPath('items')))
+          evaluateDelta({ items: Infinity })
+          return null
+        })
+        // If items is not an array, additionalItems is allowed, but ignored per some spec tests!
+        // We do nothing and let it throw except for in allowUnusedKeywords mode
+        // As a result, omitting .items is not allowed by default, only in allowUnusedKeywords mode
+      }
+
+      checkContains((run) => {
+        forArray(current, format('0'), (prop, i) => {
+          run(prop, () => {
+            evaluateDelta({ dyn: { item: true } })
+            evaluateDeltaDynamic({ item: i })
+          })
+        })
+      })
+
+      const itemsSimple = (ischema) => {
+        if (!isPlainObject(ischema)) return false
+        if (ischema.enum || functions.hasOwn(ischema, 'const')) return true
+        if (ischema.type) {
+          const itemTypes = Array.isArray(ischema.type) ? ischema.type : [ischema.type]
+          if (itemTypes.every((itemType) => primitiveTypes.includes(itemType))) return true
+        }
+        if (ischema.$ref) {
+          const [sub] = resolveReference(root, schemas, ischema.$ref, basePath())[0] || []
+          if (itemsSimple(sub)) return true
+        }
+        return false
+      }
+      const itemsSimpleOrFalse = (ischema) => ischema === false || itemsSimple(ischema)
+      const uniqueSimple = () => {
+        if (node.maxItems !== undefined || itemsSimpleOrFalse(node.items)) return true
+        // In old format, .additionalItems requires .items to have effect
+        if (Array.isArray(node.items) && itemsSimpleOrFalse(node.additionalItems)) return true
+        return false
+      }
+      prevWrap(true, () => {
+        handle('uniqueItems', ['boolean'], (uniqueItems) => {
+          if (uniqueItems === false) return null
+          if (!uniqueSimple()) complex('maxItems should be specified for non-primitive uniqueItems')
+          Object.assign(scope, { unique: functions.unique, deepEqual: functions.deepEqual })
+          return format('!unique(%s)', name)
+        })
+      })
+    }
+
+    // if allErrors is false, we can skip present check for required properties validated before
+    const checked = (p) =>
+      !allErrors &&
+      (stat.required.includes(p) || queryCurrent().some((h) => h.stat.required.includes(p)))
+
+    const checkObjects = () => {
+      const propertiesCount = format('Object.keys(%s).length', name)
+      handle('maxProperties', ['natural'], (max) => format('%s > %d', propertiesCount, max))
+      handle('minProperties', ['natural'], (min) => format('%s < %d', propertiesCount, min))
+      enforceMinMax('minProperties', 'maxProperties')
+
+      handle('propertyNames', ['object', 'boolean'], (s) => {
+        forObjectKeys(current, (sub, key) => {
+          // Add default type for non-ref schemas, so strong mode is fine with omitting it
+          const nameSchema = typeof s === 'object' && !s.$ref ? { type: 'string', ...s } : s
+          const nameprop = Object.freeze({ name: key, errorParent: sub, type: 'string' })
+          rule(nameprop, nameSchema, subPath('propertyNames'))
+        })
+        return null
+      })
+
+      handle('required', ['array'], (required) => {
+        for (const req of required) {
+          if (checked(req)) continue
+          const prop = currPropImm(req)
+          errorIf(safenot(present(prop)), { path: ['required'], prop })
+        }
+        evaluateDelta({ required })
+        return null
+      })
+
+      for (const dependencies of ['dependencies', 'dependentRequired', 'dependentSchemas']) {
+        if (dependencies !== 'dependencies' && getMeta().dependentUnsupported) continue
+        handle(dependencies, ['object'], (value) => {
+          for (const key of Object.keys(value)) {
+            const deps = typeof value[key] === 'string' ? [value[key]] : value[key]
+            const item = currPropImm(key, checked(key))
+            if (Array.isArray(deps) && dependencies !== 'dependentSchemas') {
+              const clauses = deps.filter((k) => !checked(k)).map((k) => present(currPropImm(k)))
+              const condition = safenot(safeand(...clauses))
+              const errorArgs = { path: [dependencies, key] }
+              if (clauses.length === 0) {
+                // nothing to do
+              } else if (item.checked) {
+                errorIf(condition, errorArgs)
+                evaluateDelta({ required: deps })
+              } else {
+                errorIf(safeand(present(item), condition), errorArgs)
+              }
+            } else if (isSchemaish(deps) && dependencies !== 'dependentRequired') {
+              uncertain(dependencies) // TODO: we don't always need this, remove when no uncertainity?
+              fun.if(item.checked ? true : present(item), () => {
+                const delta = rule(current, deps, subPath(dependencies, key), dyn)
+                evaluateDelta(orDelta({}, delta))
+                evaluateDeltaDynamic(delta)
+              })
+            } else fail(`Unexpected ${dependencies} entry`)
+          }
+          return null
+        })
+      }
+
+      handle('propertyDependencies', ['object'], (propertyDependencies) => {
+        for (const [key, variants] of Object.entries(propertyDependencies)) {
+          enforce(isPlainObject(variants), 'propertyDependencies must be an object')
+          uncertain('propertyDependencies') // TODO: we don't always need this, remove when no uncertainity?
+          const item = currPropImm(key, checked(key))
+          // NOTE: would it be useful to also check if it's a string?
+          fun.if(item.checked ? true : present(item), () => {
+            for (const [val, deps] of Object.entries(variants)) {
+              enforce(isSchemaish(deps), 'propertyDependencies must contain schemas')
+              fun.if(compare(buildName(item), val), () => {
+                // TODO: we already know that we have an object here, optimize?
+                const delta = rule(current, deps, subPath('propertyDependencies', key, val), dyn)
+                evaluateDelta(orDelta({}, delta))
+                evaluateDeltaDynamic(delta)
+              })
+            }
+          })
+        }
+        return null
+      })
+
+      handle('properties', ['object'], (properties) => {
+        for (const p of Object.keys(properties)) {
+          if (constProp === p) continue // checked in discriminator, avoid double-check
+          rule(currPropImm(p, checked(p)), properties[p], subPath('properties', p))
+        }
+        evaluateDelta({ properties: Object.keys(properties) })
+        return null
+      })
+
+      prevWrap(node.patternProperties, () => {
+        handle('patternProperties', ['object'], (patternProperties) => {
+          forObjectKeys(current, (sub, key) => {
+            for (const p of Object.keys(patternProperties)) {
+              enforceRegex(p, node.propertyNames || {})
+              fun.if(patternTest(p, key), () => {
+                rule(sub, patternProperties[p], subPath('patternProperties', p))
+              })
+            }
+          })
+          evaluateDelta({ patterns: Object.keys(patternProperties) })
+          return null
+        })
+        if (node.additionalProperties || node.additionalProperties === false) {
+          const properties = Object.keys(node.properties || {})
+          const patternProperties = Object.keys(node.patternProperties || {})
+          if (node.additionalProperties === false) {
+            // Postpone the check to the end when all nested .required are collected
+            finalLint.push(() => lintRequired(properties, patternProperties))
+          }
+          const condition = (key) => additionalCondition(key, properties, patternProperties)
+          additionalProperties('additionalProperties', condition)
+        }
+      })
+
+      if (getMeta().objectContains) {
+        checkContains((run) => {
+          forObjectKeys(current, (prop, i) => {
+            run(prop, () => {
+              evaluateDelta({ dyn: { properties: [true] } })
+              evaluateDeltaDynamic({ propertiesVars: [i] })
+            })
+          })
+        })
+      }
+    }
+
+    const checkConst = () => {
+      const handledConst = handle('const', ['jsonval'], (val) => safenot(compare(name, val)))
+      if (handledConst && !allowUnusedKeywords) return true // enum can't be present, this is rechecked by allowUnusedKeywords
+      const handledEnum = handle('enum', ['array'], (vals) => {
+        const objects = vals.filter((value) => value && typeof value === 'object')
+        const primitive = vals.filter((value) => !(value && typeof value === 'object'))
+        return safenotor(...[...primitive, ...objects].map((value) => compare(name, value)))
+      })
+      return handledConst || handledEnum
+    }
+
+    const checkContains = (iterate) => {
+      // This can be called two times, 'object' and 'array' separately
+      handle('contains', ['object', 'boolean'], () => {
+        uncertain('contains')
+
+        if (getMeta().objectContains && typeApplicable('array') && typeApplicable('object')) {
+          enforceValidation("possible type confusion in 'contains',", "forbid 'object' or 'array'")
+        }
+
+        const passes = gensym('passes')
+        fun.write('let %s = 0', passes)
+
+        const suberr = suberror()
+        iterate((prop, evaluate) => {
+          const { sub } = subrule(suberr, prop, node.contains, subPath('contains'))
+          fun.if(sub, () => {
+            fun.write('%s++', passes)
+            if (getMeta().containsEvaluates) {
+              enforce(!removeAdditional, 'Can\'t use removeAdditional with draft2020+ "contains"')
+              evaluate()
+            }
+          })
+        })
+
+        if (!handle('minContains', ['natural'], (mn) => format('%s < %d', passes, mn), { suberr }))
+          errorIf(format('%s < 1', passes), { path: ['contains'], suberr })
+
+        handle('maxContains', ['natural'], (max) => format('%s > %d', passes, max))
+        enforceMinMax('minContains', 'maxContains')
+        return null
+      })
+    }
+
+    const checkGeneric = () => {
+      handle('not', ['object', 'boolean'], (not) => subrule(null, current, not, subPath('not')).sub)
+      if (node.not) uncertain('not')
+
+      const thenOrElse = node.then || node.then === false || node.else || node.else === false
+      // if we allow lone "if" to be present with allowUnusedKeywords, then we must process it to do the evaluation
+      // TODO: perhaps we can optimize this out if dynamic evaluation isn't needed _even with this if processed_
+      if (thenOrElse || allowUnusedKeywords)
+        handle('if', ['object', 'boolean'], (ifS) => {
+          uncertain('if/then/else')
+          const { sub, delta: deltaIf } = subrule(null, current, ifS, subPath('if'), dyn)
+          let handleElse, handleThen, deltaElse, deltaThen
+          handle('else', ['object', 'boolean'], (elseS) => {
+            handleElse = () => {
+              deltaElse = rule(current, elseS, subPath('else'), dyn)
+              evaluateDeltaDynamic(deltaElse)
+            }
+            return null
+          })
+          handle('then', ['object', 'boolean'], (thenS) => {
+            handleThen = () => {
+              deltaThen = rule(current, thenS, subPath('then'), dyn)
+              evaluateDeltaDynamic(andDelta(deltaIf, deltaThen))
+            }
+            return null
+          })
+          fun.if(sub, handleThen, handleElse)
+          evaluateDelta(orDelta(deltaElse || {}, andDelta(deltaIf, deltaThen || {})))
+          return null
+        })
+
+      const performAllOf = (allOf, rulePath = 'allOf') => {
+        enforce(allOf.length > 0, `${rulePath} cannot be empty`)
+        for (const [key, sch] of Object.entries(allOf))
+          evaluateDelta(rule(current, sch, subPath(rulePath, key), dyn))
+        return null
+      }
+      handle('allOf', ['array'], (allOf) => performAllOf(allOf))
+
+      let handleDiscriminator = null
+      handle('discriminator', ['object'], (discriminator) => {
+        const seen = new Set()
+        const fix = (check, message, arg) => enforce(check, `[discriminator]: ${message}`, arg)
+        const { propertyName: pname, mapping: map, ...e0 } = discriminator
+        const prop = currPropImm(pname)
+        fix(pname && !node.oneOf !== !node.anyOf, 'need propertyName, oneOf OR anyOf')
+        fix(Object.keys(e0).length === 0, 'only "propertyName" and "mapping" are supported')
+        const keylen = (obj) => (isPlainObject(obj) ? Object.keys(obj).length : null)
+        handleDiscriminator = (branches, ruleName) => {
+          const runDiscriminator = () => {
+            fun.write('switch (%s) {', buildName(prop)) // we could also have used ifs for complex types
+            let delta
+            for (const [i, branch] of Object.entries(branches)) {
+              const { const: myval, enum: myenum, ...e1 } = (branch.properties || {})[pname] || {}
+              let vals = myval !== undefined ? [myval] : myenum
+              if (!vals && branch.$ref) {
+                const [sub] = resolveReference(root, schemas, branch.$ref, basePath())[0] || []
+                enforce(isPlainObject(sub), 'failed to resolve $ref:', branch.$ref)
+                const rprop = (sub.properties || {})[pname] || {}
+                vals = rprop.const !== undefined ? [rprop.const] : rprop.enum
+              }
+              const ok1 = Array.isArray(vals) && vals.length > 0
+              fix(ok1, 'branches should have unique string const or enum values for [propertyName]')
+              const ok2 = Object.keys(e1).length === 0 && (!myval || !myenum)
+              fix(ok2, 'only const OR enum rules are allowed on [propertyName] in branches')
+              for (const val of vals) {
+                const okMapping = !map || (functions.hasOwn(map, val) && map[val] === branch.$ref)
+                fix(okMapping, 'mismatching mapping for', val)
+                const valok = typeof val === 'string' && !seen.has(val)
+                fix(valok, 'const/enum values for [propertyName] should be unique strings')
+                seen.add(val)
+                fun.write('case %j:', val)
+              }
+              const subd = rule(current, branch, subPath(ruleName, i), dyn, { constProp: pname })
+              evaluateDeltaDynamic(subd)
+              delta = delta ? orDelta(delta, subd) : subd
+              fun.write('break')
+            }
+            fix(map === undefined || keylen(map) === seen.size, 'mismatching mapping size')
+            evaluateDelta(delta)
+            fun.write('default:')
+            error({ path: [ruleName] })
+            fun.write('}')
+          }
+          const propCheck = () => {
+            if (!checked(pname)) {
+              const errorPath = ['discriminator', 'propertyName']
+              fun.if(present(prop), runDiscriminator, () => error({ path: errorPath, prop }))
+            } else runDiscriminator()
+          }
+          if (allErrors || !functions.deepEqual(stat.type, ['object'])) {
+            fun.if(types.get('object')(name), propCheck, () => error({ path: ['discriminator'] }))
+          } else propCheck()
+          // can't evaluateDelta on type and required to not break the checks below, but discriminator
+          // is usually used with refs anyway so those won't be of much use
+          fix(functions.deepEqual(stat.type, ['object']), 'has to be checked for type:', 'object')
+          fix(stat.required.includes(pname), 'propertyName should be placed in required:', pname)
+          return null
+        }
+        return null
+      })
+
+      // Mark the schema as uncertain if the path taken is not determined solely by the branch type
+      const uncertainBranchTypes = (key, arr) => {
+        // In general, { const: [] } can interfere with other { type: 'array' }
+        // Same for { const: {} } and { type: 'object' }
+        // So this check doesn't treat those as non-conflicting, and instead labels those as uncertain conflicts
+        const btypes = arr.map((x) => x.type || (Array.isArray(x.const) ? 'array' : typeof x.const)) // typeof can be 'undefined', but we don't care
+        const maybeObj = btypes.filter((x) => !primitiveTypes.includes(x) && x !== 'array').length
+        const maybeArr = btypes.filter((x) => !primitiveTypes.includes(x) && x !== 'object').length
+        if (maybeObj > 1 || maybeArr > 1) uncertain(`${key}, use discriminator to make it certain`)
+      }
+
+      handle('anyOf', ['array'], (anyOf) => {
+        enforce(anyOf.length > 0, 'anyOf cannot be empty')
+        if (anyOf.length === 1) return performAllOf(anyOf)
+        if (handleDiscriminator) return handleDiscriminator(anyOf, 'anyOf')
+        const suberr = suberror()
+        if (!canSkipDynamic()) {
+          uncertainBranchTypes('anyOf', anyOf) // const sorting for removeAdditional is not supported in dynamic mode
+          // In this case, all have to be checked to gather evaluated properties
+          const entries = Object.entries(anyOf).map(([key, sch]) =>
+            subrule(suberr, current, sch, subPath('anyOf', key), dyn)
+          )
+          evaluateDelta(entries.reduce((acc, cur) => orDelta(acc, cur.delta), {}))
+          errorIf(safenotor(...entries.map(({ sub }) => sub)), { path: ['anyOf'], suberr })
+          for (const { delta, sub } of entries) fun.if(sub, () => evaluateDeltaDynamic(delta))
+          return null
+        }
+        // We sort the variants to perform const comparisons first, then primitives/array/object/unknown
+        // This way, we can be sure that array/object + removeAdditional do not affect const evaluation
+        // Note that this _might_ e.g. remove all elements of an array in a 2nd branch _and_ fail with `const: []` in the 1st, but that's expected behavior
+        // This can be done because we can stop on the first match in anyOf if we don't need dynamic evaluation
+        const constBlocks = anyOf.filter((x) => functions.hasOwn(x, 'const'))
+        const otherBlocks = anyOf.filter((x) => !functions.hasOwn(x, 'const'))
+        uncertainBranchTypes('anyOf', otherBlocks)
+        const blocks = [...constBlocks, ...otherBlocks]
+        let delta
+
+        if (!getMeta().exclusiveRefs) {
+          // Under unevaluated* support, we can't optimize out branches using simple rules, see below
+          const entries = Object.entries(anyOf).map(([key, sch]) =>
+            subrule(suberr, current, sch, subPath('anyOf', key), dyn)
+          )
+          delta = entries.reduce((acc, cur) => orDelta(acc, cur.delta), {})
+          errorIf(safenotor(...entries.map(({ sub }) => sub)), { path: ['anyOf'], suberr })
+        } else {
+          // Optimization logic below isn't stable under unevaluated* presence, as branches can be the sole reason of
+          // causing dynamic evaluation, and optimizing them out can miss the `if (!canSkipDynamic()) {` check above
+          let body = () => error({ path: ['anyOf'], suberr })
+          for (const [key, sch] of Object.entries(blocks).reverse()) {
+            const oldBody = body
+            body = () => {
+              const { sub, delta: deltaVar } = subrule(suberr, current, sch, subPath('anyOf', key))
+              fun.if(safenot(sub), oldBody) // this can exclude branches, see note above
+              delta = delta ? orDelta(delta, deltaVar) : deltaVar
+            }
+          }
+          body()
+        }
+
+        evaluateDelta(delta)
+        return null
+      })
+
+      handle('oneOf', ['array'], (oneOf) => {
+        enforce(oneOf.length > 0, 'oneOf cannot be empty')
+        if (oneOf.length === 1) return performAllOf(oneOf)
+        if (handleDiscriminator) return handleDiscriminator(oneOf, 'oneOf')
+        uncertainBranchTypes('oneOf', oneOf)
+        const passes = gensym('passes')
+        fun.write('let %s = 0', passes)
+        const suberr = suberror()
+        let delta
+        let i = 0
+        const entries = Object.entries(oneOf).map(([key, sch]) => {
+          if (!includeErrors && i++ > 1) errorIf(format('%s > 1', passes), { path: ['oneOf'] })
+          const entry = subrule(suberr, current, sch, subPath('oneOf', key), dyn)
+          fun.if(entry.sub, () => fun.write('%s++', passes))
+          delta = delta ? orDelta(delta, entry.delta) : entry.delta
+          return entry
+        })
+        evaluateDelta(delta)
+        errorIf(format('%s !== 1', passes), { path: ['oneOf'] })
+        fun.if(format('%s === 0', passes), () => mergeerror(suberr)) // if none matched, dump all errors
+        for (const entry of entries) fun.if(entry.sub, () => evaluateDeltaDynamic(entry.delta))
+        return null
+      })
+    }
+
+    const typeWrap = (checkBlock, validTypes, queryType) => {
+      const [funSize, unusedSize] = [fun.size(), unused.size]
+      fun.if(definitelyType(...validTypes) ? true : queryType, checkBlock)
+      // enforce check that non-applicable blocks are empty and no rules were applied
+      if (funSize !== fun.size() || unusedSize !== unused.size)
+        enforce(typeApplicable(...validTypes), `Unexpected rules in type`, node.type)
+    }
+
+    // Unevaluated validation
+    const checkArraysFinal = () => {
+      if (stat.items === Infinity) {
+        // Everything is statically evaluated, so this check is unreachable. Allow only 'false' rule here.
+        if (node.unevaluatedItems === false) consume('unevaluatedItems', 'boolean')
+      } else if (node.unevaluatedItems || node.unevaluatedItems === false) {
+        if (isDynamic(stat).items) {
+          if (!opts[optDynamic]) throw new Error('Dynamic unevaluated tracing is not enabled')
+          const limit = format('Math.max(%d, ...%s)', stat.items, dyn.items)
+          const extra = (i) => format('%s.includes(%s)', dyn.item, i)
+          additionalItems('unevaluatedItems', limit, getMeta().containsEvaluates ? extra : null)
+        } else {
+          additionalItems('unevaluatedItems', format('%d', stat.items))
+        }
+      }
+    }
+    const checkObjectsFinal = () => {
+      prevWrap(stat.patterns.length > 0 || stat.dyn.patterns.length > 0 || stat.unknown, () => {
+        if (stat.properties.includes(true)) {
+          // Everything is statically evaluated, so this check is unreachable. Allow only 'false' rule here.
+          if (node.unevaluatedProperties === false) consume('unevaluatedProperties', 'boolean')
+        } else if (node.unevaluatedProperties || node.unevaluatedProperties === false) {
+          const notStatic = (key) => additionalCondition(key, stat.properties, stat.patterns)
+          if (isDynamic(stat).properties) {
+            if (!opts[optDynamic]) throw new Error('Dynamic unevaluated tracing is not enabled')
+            scope.propertyIn = functions.propertyIn
+            const notDynamic = (key) => format('!propertyIn(%s, %s)', key, dyn.props)
+            const condition = (key) => safeand(notStatic(key), notDynamic(key))
+            additionalProperties('unevaluatedProperties', condition)
+          } else {
+            if (node.unevaluatedProperties === false) lintRequired(stat.properties, stat.patterns)
+            additionalProperties('unevaluatedProperties', notStatic)
+          }
+        }
+      })
+    }
+
+    const performValidation = () => {
+      if (prev !== null) fun.write('const %s = errorCount', prev)
+      if (checkConst()) {
+        const typeKeys = [...types.keys()] // we don't extract type from const/enum, it's enough that we know that it's present
+        evaluateDelta({ properties: [true], items: Infinity, type: typeKeys, fullstring: true }) // everything is evaluated for const
+        if (!allowUnusedKeywords) {
+          // const/enum shouldn't have any other validation rules except for already checked type/$ref
+          enforce(unused.size === 0, 'Unexpected keywords mixed with const or enum:', [...unused])
+          // If it does though, we should not short-circuit validation. This could be optimized by extracting types, but not significant
+          return
+        }
+      }
+
+      typeWrap(checkNumbers, ['number', 'integer'], types.get('number')(name))
+      typeWrap(checkStrings, ['string'], types.get('string')(name))
+      typeWrap(checkArrays, ['array'], types.get('array')(name))
+      typeWrap(checkObjects, ['object'], types.get('object')(name))
+
+      checkGeneric()
+
+      // evaluated: apply static + dynamic
+      typeWrap(checkArraysFinal, ['array'], types.get('array')(name))
+      typeWrap(checkObjectsFinal, ['object'], types.get('object')(name))
+
+      for (const lint of finalLint) lint()
+
+      // evaluated: propagate dynamic to parent dynamic (aka trace)
+      // static to parent is merged via return value
+      applyDynamicToDynamic(trace, local.item, local.items, local.props)
+    }
+
+    // main post-presence check validation function
+    const writeMain = () => {
+      if (local.item) fun.write('const %s = []', local.item)
+      if (local.items) fun.write('const %s = [0]', local.items)
+      if (local.props) fun.write('const %s = [[], []]', local.props)
+
+      // refs
+      handle('$ref', ['string'], ($ref) => {
+        const resolved = resolveReference(root, schemas, $ref, basePath())
+        const [sub, subRoot, path] = resolved[0] || []
+        if (!sub && sub !== false) fail('failed to resolve $ref:', $ref)
+        if (sub.type) {
+          // This could be done better, but for now we check only the direct type in the $ref
+          const type = Array.isArray(sub.type) ? sub.type : [sub.type]
+          evaluateDelta({ type })
+          if (requireValidation) {
+            // If validation is required, then $ref is guranteed to validate all items and properties
+            if (type.includes('array')) evaluateDelta({ items: Infinity })
+            if (type.includes('object')) evaluateDelta({ properties: [true] })
+          }
+        }
+        return applyRef(compileSub(sub, subRoot, path), { path: ['$ref'] })
+      })
+      if (getMeta().exclusiveRefs) {
+        enforce(!opts[optDynamic], 'unevaluated* is supported only on draft2019-09 and above')
+        if (node.$ref) return // ref overrides any sibling keywords for older schemas
+      }
+      handle('$recursiveRef', ['string'], ($recursiveRef) => {
+        if (!opts[optRecAnchors]) throw new Error('Recursive anchors are not enabled')
+        enforce($recursiveRef === '#', 'Behavior of $recursiveRef is defined only for "#"')
+        // Resolve to recheck that recursive ref is enabled
+        const resolved = resolveReference(root, schemas, '#', basePath())
+        const [sub, subRoot, path] = resolved[0]
+        laxMode(sub.$recursiveAnchor, '$recursiveRef without $recursiveAnchor')
+        const n = compileSub(sub, subRoot, path)
+        // Apply deep recursion from here only if $recursiveAnchor is true, else just run self
+        const nrec = sub.$recursiveAnchor ? format('(recursive || %s)', n) : n
+        return applyRef(nrec, { path: ['$recursiveRef'] })
+      })
+      handle('$dynamicRef', ['string'], ($dynamicRef) => {
+        if (!opts[optDynAnchors]) throw new Error('Dynamic anchors are not enabled')
+        enforce(/^[^#]*#[a-zA-Z0-9_-]+$/.test($dynamicRef), 'Unsupported $dynamicRef format')
+        const dynamicTail = $dynamicRef.replace(/^[^#]+/, '')
+        const resolved = resolveReference(root, schemas, $dynamicRef, basePath())
+        if (!resolved[0] && !getMeta().bookending) {
+          // TODO: this is draft/next only atm, recheck if dynamicResolve() can fail in runtime and what should happen
+          // We have this allowed in lax mode only for now
+          // Ref: https://github.com/json-schema-org/json-schema-spec/issues/1064#issuecomment-947223332
+          // Ref: https://github.com/json-schema-org/json-schema-spec/pull/1139
+          // Ref: https://github.com/json-schema-org/json-schema-spec/issues/1140 (unresolved)
+          laxMode(false, '$dynamicRef bookending resolution failed (even though not required)')
+          scope.dynamicResolve = functions.dynamicResolve
+          const nrec = format('dynamicResolve(dynAnchors || [], %j)', dynamicTail)
+          return applyRef(nrec, { path: ['$dynamicRef'] })
+        }
+        enforce(resolved[0], '$dynamicRef bookending resolution failed', $dynamicRef)
+        const [sub, subRoot, path] = resolved[0]
+        const ok = sub.$dynamicAnchor && `#${sub.$dynamicAnchor}` === dynamicTail
+        laxMode(ok, '$dynamicRef without $dynamicAnchor in the same scope')
+        const n = compileSub(sub, subRoot, path)
+        scope.dynamicResolve = functions.dynamicResolve
+        const nrec = ok ? format('(dynamicResolve(dynAnchors || [], %j) || %s)', dynamicTail, n) : n
+        return applyRef(nrec, { path: ['$dynamicRef'] })
+      })
+
+      // typecheck
+      let typeCheck = null
+      handle('type', ['string', 'array'], (type) => {
+        const typearr = Array.isArray(type) ? type : [type]
+        for (const t of typearr) enforce(typeof t === 'string' && types.has(t), 'Unknown type:', t)
+        if (current.type) {
+          enforce(functions.deepEqual(typearr, [current.type]), 'One type allowed:', current.type)
+          evaluateDelta({ type: [current.type] })
+          return null
+        }
+        if (parentCheckedType(...typearr)) return null
+        const filteredTypes = typearr.filter((t) => typeApplicable(t))
+        if (filteredTypes.length === 0) fail('No valid types possible')
+        evaluateDelta({ type: typearr }) // can be safely done here, filteredTypes already prepared
+        typeCheck = safenotor(...filteredTypes.map((t) => types.get(t)(name)))
+        return null
+      })
+
+      // main validation block
+      // if type validation was needed and did not return early, wrap this inside an else clause.
+      if (typeCheck && allErrors) {
+        fun.if(typeCheck, () => error({ path: ['type'] }), performValidation)
+      } else {
+        if (typeCheck) errorIf(typeCheck, { path: ['type'] })
+        performValidation()
+      }
+
+      // account for maxItems to recheck if they limit items. TODO: perhaps we could keep track of this in stat?
+      if (stat.items < Infinity && node.maxItems <= stat.items) evaluateDelta({ items: Infinity })
+    }
+
+    // presence check and call main validation block
+    if (node.default !== undefined && useDefaults) {
+      if (definitelyPresent) fail('Can not apply default value here (e.g. at root)')
+      const defvalue = get('default', 'jsonval')
+      fun.if(present(current), writeMain, () => fun.write('%s = %j', name, defvalue))
+    } else {
+      handle('default', ['jsonval'], null) // unused
+      fun.if(definitelyPresent ? true : present(current), writeMain)
+    }
+
+    basePathStack.length = basePathStackLength // restore basePath
+
+    // restore recursiveAnchor history if it's not empty and ends with current node
+    if (recursiveLog[0] && recursiveLog[recursiveLog.length - 1][0] === node) recursiveLog.pop()
+    if (isDynScope && node !== schema) fun.write('dynLocal.shift()') // restore dynamic scope, no need on top-level
+
+    // Checks related to static schema analysis
+    if (!allowUnreachable) enforce(!fun.optimizedOut, 'some checks are never reachable')
+    if (isSub) {
+      const logicalOp = ['not', 'if', 'then', 'else'].includes(schemaPath[schemaPath.length - 1])
+      const branchOp = ['oneOf', 'anyOf', 'allOf'].includes(schemaPath[schemaPath.length - 2])
+      const depOp = ['dependencies', 'dependentSchemas'].includes(schemaPath[schemaPath.length - 2])
+      const propDepOp = ['propertyDependencies'].includes(schemaPath[schemaPath.length - 3])
+      // Coherence check, unreachable, double-check that we came from expected path
+      enforce(logicalOp || branchOp || depOp || propDepOp, 'Unexpected logical path')
+    } else if (!schemaPath.includes('not')) {
+      // 'not' does not mark anything as evaluated (unlike even if/then/else), so it's safe to exclude from these
+      // checks, as we are sure that everything will be checked without it. It can be viewed as a pure add-on.
+      if (!stat.type) enforceValidation('type')
+      if (typeApplicable('array') && stat.items !== Infinity)
+        enforceValidation(node.items ? 'additionalItems or unevaluatedItems' : 'items rule')
+      if (typeApplicable('object') && !stat.properties.includes(true))
+        enforceValidation('additionalProperties or unevaluatedProperties')
+      if (typeof node.propertyNames !== 'object')
+        for (const sub of ['additionalProperties', 'unevaluatedProperties'])
+          if (node[sub]) enforceValidation(`wild-card ${sub}`, 'requires propertyNames')
+      if (!stat.fullstring && requireStringValidation) {
+        const stringWarning = 'pattern, format or contentSchema should be specified for strings'
+        fail(`[requireStringValidation] ${stringWarning}, use pattern: ^[\\s\\S]*$ to opt-out`)
+      }
+    }
+    if (node.properties && !node.required) enforceValidation('if properties is used, required')
+    enforce(unused.size === 0 || allowUnusedKeywords, 'Unprocessed keywords:', [...unused])
+
+    return { stat, local } // return statically evaluated
+  }
+
+  const { stat, local } = visit(format('validate.errors'), [], { name: safe('data') }, schema, [])
+
+  // evaluated: return dynamic for refs
+  if (opts[optDynamic] && (isDynamic(stat).items || isDynamic(stat).properties)) {
+    if (!local) throw new Error('Failed to trace dynamic properties') // Unreachable
+    fun.write('validate.evaluatedDynamic = [%s, %s, %s]', local.item, local.items, local.props)
+  }
+
+  if (allErrors) fun.write('return errorCount === 0')
+  else fun.write('return true')
+
+  fun.write('}')
+
+  validate = fun.makeFunction(scope)
+  validate[evaluatedStatic] = stat
+  delete scope[funname] // more logical key order
+  scope[funname] = validate
+  return funname
+}
+
+const compile = (schemas, opts) => {
+  if (!Array.isArray(schemas)) throw new Error('Expected an array of schemas')
+  try {
+    const scope = Object.create(null)
+    const { getref } = scopeMethods(scope)
+    return { scope, refs: schemas.map((s) => getref(s) || compileSchema(s, s, opts, scope)) }
+  } catch (e) {
+    // For performance, we try to build the schema without dynamic tracing first, then re-run with
+    // it enabled if needed. Enabling it without need can give up to about 40% performance drop.
+    if (!opts[optDynamic] && e.message === 'Dynamic unevaluated tracing is not enabled')
+      return compile(schemas, { ...opts, [optDynamic]: true })
+    // Also enable dynamic and recursive refs only if needed
+    if (!opts[optDynAnchors] && e.message === 'Dynamic anchors are not enabled')
+      return compile(schemas, { ...opts, [optDynAnchors]: true })
+    if (!opts[optRecAnchors] && e.message === 'Recursive anchors are not enabled')
+      return compile(schemas, { ...opts, [optRecAnchors]: true })
+    throw e
+  }
+}
+
+module.exports = { compile }
+
+
+/***/ }),
+
+/***/ 107:
+/***/ ((module) => {
+
+"use strict";
+
+
+const core = {
+  // matches ajv + length checks + does not start with a dot
+  // note that quoted emails are deliberately unsupported (as in ajv), who would want \x01 in email
+  // first check is an additional fast path with lengths: 20+(1+21)*2 = 64, (1+61+1)+((1+60+1)+1)*3 = 252 < 253, that should cover most valid emails
+  // max length is 64 (name) + 1 (@) + 253 (host), we want to ensure that prior to feeding to the fast regex
+  // the second regex checks for quoted, starting-leading dot in name, and two dots anywhere
+  email: (input) => {
+    if (input.length > 318) return false
+    const fast = /^[a-z0-9!#$%&'*+/=?^_`{|}~-]{1,20}(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]{1,21}){0,2}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,60}[a-z0-9])?){0,3}$/i
+    if (fast.test(input)) return true
+    if (!input.includes('@') || /(^\.|^"|\.@|\.\.)/.test(input)) return false
+    const [name, host, ...rest] = input.split('@')
+    if (!name || !host || rest.length !== 0 || name.length > 64 || host.length > 253) return false
+    if (!/^[a-z0-9.-]+$/i.test(host) || !/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/i.test(name)) return false
+    return host.split('.').every((part) => /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/i.test(part))
+  },
+  // matches ajv + length checks
+  hostname: (input) => {
+    if (input.length > (input.endsWith('.') ? 254 : 253)) return false
+    const hostname = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\.?$/i
+    return hostname.test(input)
+  },
+
+  // 'time' matches ajv + length checks, 'date' matches ajv full
+  // date: https://tools.ietf.org/html/rfc3339#section-5.6
+  // date-time: https://tools.ietf.org/html/rfc3339#section-5.6
+  // leap year: https://tools.ietf.org/html/rfc3339#appendix-C
+  // 11: 1990-01-01, 1: T, 9: 00:00:00., 12: maxiumum fraction length (non-standard), 6: +00:00
+  date: (input) => {
+    if (input.length !== 10) return false
+    if (input[5] === '0' && input[6] === '2') {
+      if (/^\d\d\d\d-02-(?:[012][1-8]|[12]0|[01]9)$/.test(input)) return true
+      const matches = input.match(/^(\d\d\d\d)-02-29$/)
+      if (!matches) return false
+      const year = matches[1] | 0
+      return year % 16 === 0 || (year % 4 === 0 && year % 25 !== 0)
+    }
+    if (input.endsWith('31')) return /^\d\d\d\d-(?:0[13578]|1[02])-31$/.test(input)
+    return /^\d\d\d\d-(?:0[13-9]|1[012])-(?:[012][1-9]|[123]0)$/.test(input)
+  },
+  // leap second handling is special, we check it's 23:59:60.*
+  time: (input) => {
+    if (input.length > 9 + 12 + 6) return false
+    const time = /^(?:2[0-3]|[0-1]\d):[0-5]\d:(?:[0-5]\d|60)(?:\.\d+)?(?:z|[+-](?:2[0-3]|[0-1]\d)(?::?[0-5]\d)?)?$/i
+    if (!time.test(input)) return false
+    if (!/:60/.test(input)) return true
+    const p = input.match(/([0-9.]+|[^0-9.])/g)
+    let hm = Number(p[0]) * 60 + Number(p[2])
+    if (p[5] === '+') hm += 24 * 60 - Number(p[6] || 0) * 60 - Number(p[8] || 0)
+    else if (p[5] === '-') hm += Number(p[6] || 0) * 60 + Number(p[8] || 0)
+    return hm % (24 * 60) === 23 * 60 + 59
+  },
+  // first two lines specific to date-time, then tests for unanchored (at end) date, code identical to 'date' above
+  // input[17] === '6' is a check for :60
+  'date-time': (input) => {
+    if (input.length > 10 + 1 + 9 + 12 + 6) return false
+    const full = /^\d\d\d\d-(?:0[1-9]|1[0-2])-(?:[0-2]\d|3[01])[t\s](?:2[0-3]|[0-1]\d):[0-5]\d:(?:[0-5]\d|60)(?:\.\d+)?(?:z|[+-](?:2[0-3]|[0-1]\d)(?::?[0-5]\d)?)$/i
+    const feb = input[5] === '0' && input[6] === '2'
+    if ((feb && input[8] === '3') || !full.test(input)) return false
+    if (input[17] === '6') {
+      const p = input.slice(11).match(/([0-9.]+|[^0-9.])/g)
+      let hm = Number(p[0]) * 60 + Number(p[2])
+      if (p[5] === '+') hm += 24 * 60 - Number(p[6] || 0) * 60 - Number(p[8] || 0)
+      else if (p[5] === '-') hm += Number(p[6] || 0) * 60 + Number(p[8] || 0)
+      if (hm % (24 * 60) !== 23 * 60 + 59) return false
+    }
+    if (feb) {
+      if (/^\d\d\d\d-02-(?:[012][1-8]|[12]0|[01]9)/.test(input)) return true
+      const matches = input.match(/^(\d\d\d\d)-02-29/)
+      if (!matches) return false
+      const year = matches[1] | 0
+      return year % 16 === 0 || (year % 4 === 0 && year % 25 !== 0)
+    }
+    if (input[8] === '3' && input[9] === '1') return /^\d\d\d\d-(?:0[13578]|1[02])-31/.test(input)
+    return /^\d\d\d\d-(?:0[13-9]|1[012])-(?:[012][1-9]|[123]0)/.test(input)
+  },
+
+  /* ipv4 and ipv6 are from ajv with length restriction */
+  // optimized https://www.safaribooksonline.com/library/view/regular-expressions-cookbook/9780596802837/ch07s16.html
+  ipv4: (ip) =>
+    ip.length <= 15 &&
+    /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?)$/.test(ip),
+  // optimized http://stackoverflow.com/questions/53497/regular-expression-that-matches-valid-ipv6-addresses
+  // max length: 1000:1000:1000:1000:1000:1000:255.255.255.255
+  // we parse ip6 format with a simple scan, leaving embedded ipv4 validation to a regex
+  // s0=count(:), s1=count(.), hex=count(a-zA-Z0-9), short=count(::)>0
+  // 48-57: '0'-'9', 97-102, 65-70: 'a'-'f', 'A'-'F', 58: ':', 46: '.'
+  /* eslint-disable one-var */
+  // prettier-ignore
+  ipv6: (input) => {
+    if (input.length > 45 || input.length < 2) return false
+    let s0 = 0, s1 = 0, hex = 0, short = false, letters = false, last = 0, start = true
+    for (let i = 0; i < input.length; i++) {
+      const c = input.charCodeAt(i)
+      if (i === 1 && last === 58 && c !== 58) return false
+      if (c >= 48 && c <= 57) {
+        if (++hex > 4) return false
+      } else if (c === 46) {
+        if (s0 > 6 || s1 >= 3 || hex === 0 || letters) return false
+        s1++
+        hex = 0
+      } else if (c === 58) {
+        if (s1 > 0 || s0 >= 7) return false
+        if (last === 58) {
+          if (short) return false
+          short = true
+        } else if (i === 0) start = false
+        s0++
+        hex = 0
+        letters = false
+      } else if ((c >= 97 && c <= 102) || (c >= 65 && c <= 70)) {
+        if (s1 > 0) return false
+        if (++hex > 4) return false
+        letters = true
+      } else return false
+      last = c
+    }
+    if (s0 < 2 || (s1 > 0 && (s1 !== 3 || hex === 0))) return false
+    if (short && input.length === 2) return true
+    if (s1 > 0 && !/(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/.test(input)) return false
+    const spaces = s1 > 0 ? 6 : 7
+    if (!short) return s0 === spaces && start && hex > 0
+    return (start || hex > 0) && s0 < spaces
+  },
+  /* eslint-enable one-var */
+  // matches ajv with optimization
+  uri: /^[a-z][a-z0-9+\-.]*:(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|v[0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/?(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?)(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i,
+  // matches ajv with optimization
+  'uri-reference': /^(?:[a-z][a-z0-9+\-.]*:)?(?:\/?\/(?:(?:[a-z0-9\-._~!$&'()*+,;=:]|%[0-9a-f]{2})*@)?(?:\[(?:(?:(?:(?:[0-9a-f]{1,4}:){6}|::(?:[0-9a-f]{1,4}:){5}|(?:[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){4}|(?:(?:[0-9a-f]{1,4}:){0,1}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){3}|(?:(?:[0-9a-f]{1,4}:){0,2}[0-9a-f]{1,4})?::(?:[0-9a-f]{1,4}:){2}|(?:(?:[0-9a-f]{1,4}:){0,3}[0-9a-f]{1,4})?::[0-9a-f]{1,4}:|(?:(?:[0-9a-f]{1,4}:){0,4}[0-9a-f]{1,4})?::)(?:[0-9a-f]{1,4}:[0-9a-f]{1,4}|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?))|(?:(?:[0-9a-f]{1,4}:){0,5}[0-9a-f]{1,4})?::[0-9a-f]{1,4}|(?:(?:[0-9a-f]{1,4}:){0,6}[0-9a-f]{1,4})?::)|v[0-9a-f]+\.[a-z0-9\-._~!$&'()*+,;=:]+)\]|(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d\d?)|(?:[a-z0-9\-._~!$&'()*+,;=]|%[0-9a-f]{2})*)(?::\d*)?(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*|\/?(?:(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})+(?:\/(?:[a-z0-9\-._~!$&'()*+,;=:@]|%[0-9a-f]{2})*)*)?)?(?:\?(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?(?:#(?:[a-z0-9\-._~!$&'()*+,;=:@/?]|%[0-9a-f]{2})*)?$/i,
+  // ajv has /^(([^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2})|\{[+#./;?&=,!@|]?([a-z0-9_]|%[0-9a-f]{2})+(:[1-9][0-9]{0,3}|\*)?(,([a-z0-9_]|%[0-9a-f]{2})+(:[1-9][0-9]{0,3}|\*)?)*\})*$/i
+  // this is equivalent
+  // uri-template: https://tools.ietf.org/html/rfc6570
+  // eslint-disable-next-line no-control-regex
+  'uri-template': /^(?:[^\x00-\x20"'<>%\\^`{|}]|%[0-9a-f]{2}|\{[+#./;?&=,!@|]?(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?(?:,(?:[a-z0-9_]|%[0-9a-f]{2})+(?::[1-9][0-9]{0,3}|\*)?)*\})*$/i,
+
+  // ajv has /^(\/([^~/]|~0|~1)*)*$/, this is equivalent
+  // JSON-pointer: https://tools.ietf.org/html/rfc6901
+  'json-pointer': /^(?:|\/(?:[^~]|~0|~1)*)$/,
+  // ajv has /^(0|[1-9][0-9]*)(#|(\/([^~/]|~0|~1)*)*)$/, this is equivalent
+  // relative JSON-pointer: http://tools.ietf.org/html/draft-luff-relative-json-pointer-00
+  'relative-json-pointer': /^(?:0|[1-9][0-9]*)(?:|#|\/(?:[^~]|~0|~1)*)$/,
+
+  // uuid: http://tools.ietf.org/html/rfc4122
+  uuid: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+
+  // length restriction is an arbitrary safeguard
+  // first regex checks if this a week duration (can't be combined with others)
+  // second regex verifies symbols, no more than one fraction, at least 1 block is present, and T is not last
+  // third regex verifies structure
+  duration: (input) =>
+    input.length > 1 &&
+    input.length < 80 &&
+    (/^P\d+([.,]\d+)?W$/.test(input) ||
+      (/^P[\dYMDTHS]*(\d[.,]\d+)?[YMDHS]$/.test(input) &&
+        /^P([.,\d]+Y)?([.,\d]+M)?([.,\d]+D)?(T([.,\d]+H)?([.,\d]+M)?([.,\d]+S)?)?$/.test(input))),
+
+  // TODO: iri, iri-reference, idn-email, idn-hostname
+}
+
+const extra = {
+  // basic
+  alpha: /^[a-zA-Z]+$/,
+  alphanumeric: /^[a-zA-Z0-9]+$/,
+
+  // hex
+  'hex-digits': /^[0-9a-f]+$/i,
+  'hex-digits-prefixed': /^0x[0-9a-f]+$/i,
+  'hex-bytes': /^([0-9a-f][0-9a-f])+$/i,
+  'hex-bytes-prefixed': /^0x([0-9a-f][0-9a-f])+$/i,
+
+  base64: (input) => input.length % 4 === 0 && /^[a-z0-9+/]*={0,3}$/i.test(input),
+
+  // ajv has /^#(\/([a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)*$/i, this is equivalent
+  // uri fragment: https://tools.ietf.org/html/rfc3986#appendix-A
+  'json-pointer-uri-fragment': /^#(|\/(\/|[a-z0-9_\-.!$&'()*+,;:=@]|%[0-9a-f]{2}|~0|~1)*)$/i,
+
+  // draft3 backwards compat
+  'host-name': core.hostname,
+  'ip-address': core.ipv4,
+
+  // manually cleaned up from is-my-json-valid, CSS 2.1 colors only per draft03 spec
+  color: /^(#[0-9A-Fa-f]{3,6}|aqua|black|blue|fuchsia|gray|green|lime|maroon|navy|olive|orange|purple|red|silver|teal|white|yellow|rgb\(\s*([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\s*,\s*([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\s*,\s*([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\s*\)|rgb\(\s*(\d?\d%|100%)\s*,\s*(\d?\d%|100%)\s*,\s*(\d?\d%|100%)\s*\))$/,
+
+  // style is deliberately unsupported, don't accept untrusted styles
+}
+
+const weak = {
+  // In weak because don't accept regexes from untrusted sources, using them can cause DoS
+  // matches ajv + length checks
+  // eslint comment outside because we don't want comments in functions, those affect output
+  /* eslint-disable no-new */
+  regex: (str) => {
+    if (str.length > 1e5) return false
+    const Z_ANCHOR = /[^\\]\\Z/
+    if (Z_ANCHOR.test(str)) return false
+    try {
+      new RegExp(str, 'u')
+      return true
+    } catch (e) {
+      return false
+    }
+  },
+  /* eslint-enable no-new */
+}
+
+module.exports = { core, extra, weak }
+
+
+/***/ }),
+
+/***/ 6551:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+const { format, safe, safenot } = __nccwpck_require__(2944)
+const { jaystring } = __nccwpck_require__(3314)
+
+const INDENT_START = /[{[]/
+const INDENT_END = /[}\]]/
+
+module.exports = () => {
+  const lines = []
+  let indent = 0
+
+  const pushLine = (line) => {
+    if (INDENT_END.test(line.trim()[0])) indent--
+    lines.push({ indent, code: line })
+    if (INDENT_START.test(line[line.length - 1])) indent++
+  }
+
+  const build = () => {
+    if (indent !== 0) throw new Error('Unexpected indent at build()')
+    const joined = lines.map((line) => format('%w%s', line.indent * 2, line.code)).join('\n')
+    return /^[a-z][a-z0-9]*$/i.test(joined) ? `return ${joined}` : `return (${joined})`
+  }
+
+  const processScope = (scope) => {
+    const entries = Object.entries(scope)
+    for (const [key, value] of entries) {
+      if (!/^[a-z][a-z0-9]*$/i.test(key)) throw new Error('Unexpected scope key!')
+      if (!(typeof value === 'function' || value instanceof RegExp))
+        throw new Error('Unexpected scope value!')
+    }
+    return entries
+  }
+
+  return {
+    optimizedOut: false, // some branch of code has been optimized out
+    size: () => lines.length,
+
+    write(fmt, ...args) {
+      if (typeof fmt !== 'string') throw new Error('Format must be a string!')
+      if (fmt.includes('\n')) throw new Error('Only single lines are supported')
+      pushLine(format(fmt, ...args))
+      return true // code was written
+    },
+
+    block(prefix, writeBody, noInline = false) {
+      const oldIndent = indent
+      this.write('%s {', prefix)
+      const length = lines.length
+      writeBody()
+      if (length === lines.length) {
+        // no lines inside block, unwind the block
+        lines.pop()
+        indent = oldIndent
+        return false // nothing written
+      } else if (length === lines.length - 1 && !noInline) {
+        // a single line has been written, inline it if opt-in allows
+        const { code } = lines[lines.length - 1]
+        // check below is just for generating more readable code, it's safe to inline all !noInline
+        if (!/^(if|for) /.test(code)) {
+          lines.length -= 2
+          indent = oldIndent
+          return this.write('%s %s', prefix, code)
+        }
+      }
+      return this.write('}')
+    },
+
+    if(condition, writeBody, writeElse) {
+      if (`${condition}` === 'false') {
+        if (writeElse) writeElse()
+        if (writeBody) this.optimizedOut = true
+      } else if (`${condition}` === 'true') {
+        if (writeBody) writeBody()
+        if (writeElse) this.optimizedOut = true
+      } else if (writeBody && this.block(format('if (%s)', condition), writeBody, !!writeElse)) {
+        if (writeElse) this.block(format('else'), writeElse) // !!writeElse above ensures {} wrapping before `else`
+      } else if (writeElse) {
+        this.if(safenot(condition), writeElse)
+      }
+    },
+
+    makeModule(scope = {}) {
+      const scopeDefs = processScope(scope).map(
+        ([key, val]) => `const ${safe(key)} = ${jaystring(val)};`
+      )
+      return `(function() {\n'use strict'\n${scopeDefs.join('\n')}\n${build()}})()`
+    },
+
+    makeFunction(scope = {}) {
+      const scopeEntries = processScope(scope)
+      const keys = scopeEntries.map((entry) => entry[0])
+      const vals = scopeEntries.map((entry) => entry[1])
+      // eslint-disable-next-line no-new-func
+      return Function(...keys, `'use strict'\n${build()}`)(...vals)
+    },
+  }
+}
+
+
+/***/ }),
+
+/***/ 5580:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+const genfun = __nccwpck_require__(6551)
+const { buildSchemas } = __nccwpck_require__(7000)
+const { compile } = __nccwpck_require__(4342)
+const { deepEqual } = __nccwpck_require__(1150)
+
+const jsonCheckWithErrors = (validate) =>
+  function validateIsJSON(data) {
+    if (!deepEqual(data, JSON.parse(JSON.stringify(data)))) {
+      validateIsJSON.errors = [{ instanceLocation: '#', error: 'not JSON compatible' }]
+      return false
+    }
+    const res = validate(data)
+    validateIsJSON.errors = validate.errors
+    return res
+  }
+
+const jsonCheckWithoutErrors = (validate) => (data) =>
+  deepEqual(data, JSON.parse(JSON.stringify(data))) && validate(data)
+
+const validator = (
+  schema,
+  { parse = false, multi = false, jsonCheck = false, isJSON = false, schemas = [], ...opts } = {}
+) => {
+  if (jsonCheck && isJSON) throw new Error('Can not specify both isJSON and jsonCheck options')
+  if (parse && (jsonCheck || isJSON))
+    throw new Error('jsonCheck and isJSON options are not applicable in parser mode')
+  const mode = parse ? 'strong' : 'default' // strong mode is default in parser, can be overriden
+  const willJSON = isJSON || jsonCheck || parse
+  const arg = multi ? schema : [schema]
+  const options = { mode, ...opts, schemas: buildSchemas(schemas, arg), isJSON: willJSON }
+  const { scope, refs } = compile(arg, options) // only a single ref
+  if (opts.dryRun) return
+  const fun = genfun()
+  if (parse) {
+    scope.parseWrap = opts.includeErrors ? parseWithErrors : parseWithoutErrors
+  } else if (jsonCheck) {
+    scope.deepEqual = deepEqual
+    scope.jsonCheckWrap = opts.includeErrors ? jsonCheckWithErrors : jsonCheckWithoutErrors
+  }
+  if (multi) {
+    fun.write('[')
+    for (const ref of refs.slice(0, -1)) fun.write('%s,', ref)
+    if (refs.length > 0) fun.write('%s', refs[refs.length - 1])
+    fun.write(']')
+    if (parse) fun.write('.map(parseWrap)')
+    else if (jsonCheck) fun.write('.map(jsonCheckWrap)')
+  } else {
+    if (parse) fun.write('parseWrap(%s)', refs[0])
+    else if (jsonCheck) fun.write('jsonCheckWrap(%s)', refs[0])
+    else fun.write('%s', refs[0])
+  }
+  const validate = fun.makeFunction(scope)
+  validate.toModule = ({ semi = true } = {}) => fun.makeModule(scope) + (semi ? ';' : '')
+  validate.toJSON = () => schema
+  return validate
+}
+
+const parseWithErrors = (validate) => (src) => {
+  if (typeof src !== 'string') return { valid: false, error: 'Input is not a string' }
+  try {
+    const value = JSON.parse(src)
+    if (!validate(value)) {
+      const { keywordLocation, instanceLocation } = validate.errors[0]
+      const keyword = keywordLocation.slice(keywordLocation.lastIndexOf('/') + 1)
+      const error = `JSON validation failed for ${keyword} at ${instanceLocation}`
+      return { valid: false, error, errors: validate.errors }
+    }
+    return { valid: true, value }
+  } catch ({ message }) {
+    return { valid: false, error: message }
+  }
+}
+
+const parseWithoutErrors = (validate) => (src) => {
+  if (typeof src !== 'string') return { valid: false }
+  try {
+    const value = JSON.parse(src)
+    if (!validate(value)) return { valid: false }
+    return { valid: true, value }
+  } catch (e) {
+    return { valid: false }
+  }
+}
+
+const parser = function(schema, { parse = true, ...opts } = {}) {
+  if (!parse) throw new Error('can not disable parse in parser')
+  return validator(schema, { parse, ...opts })
+}
+
+module.exports = { validator, parser }
+
+
+/***/ }),
+
+/***/ 3314:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+const { format, safe } = __nccwpck_require__(2944)
+const { scopeMethods } = __nccwpck_require__(7623)
+const functions = __nccwpck_require__(1150)
+
+// for building into the validation function
+const types = new Map(
+  Object.entries({
+    null: (name) => format('%s === null', name),
+    boolean: (name) => format('typeof %s === "boolean"', name),
+    array: (name) => format('Array.isArray(%s)', name),
+    object: (n) => format('typeof %s === "object" && %s && !Array.isArray(%s)', n, n, n),
+    number: (name) => format('typeof %s === "number"', name),
+    integer: (name) => format('Number.isInteger(%s)', name),
+    string: (name) => format('typeof %s === "string"', name),
+  })
+)
+
+const buildName = ({ name, parent, keyval, keyname }) => {
+  if (name) {
+    if (parent || keyval || keyname) throw new Error('name can be used only stand-alone')
+    return name // top-level
+  }
+  if (!parent) throw new Error('Can not use property of undefined parent!')
+  const parentName = buildName(parent)
+  if (keyval !== undefined) {
+    if (keyname) throw new Error('Can not use key value and name together')
+    if (!['string', 'number'].includes(typeof keyval)) throw new Error('Invalid property path')
+    if (/^[a-z][a-z0-9_]*$/i.test(keyval)) return format('%s.%s', parentName, safe(keyval))
+    return format('%s[%j]', parentName, keyval)
+  } else if (keyname) {
+    return format('%s[%s]', parentName, keyname)
+  }
+  /* c8 ignore next */
+  throw new Error('Unreachable')
+}
+
+const jsonProtoKeys = new Set(
+  [].concat(
+    ...[Object, Array, String, Number, Boolean].map((c) => Object.getOwnPropertyNames(c.prototype))
+  )
+)
+
+const jsHelpers = (fun, scope, propvar, { unmodifiedPrototypes, isJSON }, noopRegExps) => {
+  const { gensym, genpattern, genloop } = scopeMethods(scope, propvar)
+
+  const present = (obj) => {
+    const name = buildName(obj) // also checks for coherence, do not remove
+    const { parent, keyval, keyname, inKeys, checked } = obj
+    /* c8 ignore next */
+    if (checked || (inKeys && isJSON)) throw new Error('Unreachable: useless check for undefined')
+    if (inKeys) return format('%s !== undefined', name)
+    if (parent && keyname) {
+      scope.hasOwn = functions.hasOwn
+      const pname = buildName(parent)
+      if (isJSON) return format('%s !== undefined && hasOwn(%s, %s)', name, pname, keyname)
+      return format('%s in %s && hasOwn(%s, %s)', keyname, pname, pname, keyname)
+    } else if (parent && keyval !== undefined) {
+      // numbers must be converted to strings for this check, hence `${keyval}` in check below
+      if (unmodifiedPrototypes && isJSON && !jsonProtoKeys.has(`${keyval}`))
+        return format('%s !== undefined', name)
+      scope.hasOwn = functions.hasOwn
+      const pname = buildName(parent)
+      if (isJSON) return format('%s !== undefined && hasOwn(%s, %j)', name, pname, keyval)
+      return format('%j in %s && hasOwn(%s, %j)', keyval, pname, pname, keyval)
+    }
+    /* c8 ignore next */
+    throw new Error('Unreachable: present() check without parent')
+  }
+
+  const forObjectKeys = (obj, writeBody) => {
+    const key = gensym('key')
+    fun.block(format('for (const %s of Object.keys(%s))', key, buildName(obj)), () => {
+      writeBody(propvar(obj, key, true), key) // always own property here
+    })
+  }
+
+  const forArray = (obj, start, writeBody) => {
+    const i = genloop()
+    const name = buildName(obj)
+    fun.block(format('for (let %s = %s; %s < %s.length; %s++)', i, start, i, name, i), () => {
+      writeBody(propvar(obj, i, unmodifiedPrototypes, true), i) // own property in Array if proto not mangled
+    })
+  }
+
+  const patternTest = (pat, key) => {
+    // Convert common patterns to string checks, makes generated code easier to read (and a tiny perf bump)
+    const r = pat.replace(/[.^$|*+?(){}[\]\\]/gu, '') // Special symbols: .^$|*+?(){}[]\
+    if (pat === `^${r}$`) return format('(%s === %j)', key, pat.slice(1, -1)) // ^abc$ -> === abc
+    if (noopRegExps.has(pat)) return format('true') // known noop
+
+    // All of the below will cause warnings in enforced string validation mode, but let's make what they actually do more visible
+    // note that /^.*$/u.test('\n') is false, so don't combine .* with anchors here!
+    if ([r, `${r}+`, `${r}.*`, `.*${r}.*`].includes(pat)) return format('%s.includes(%j)', key, r)
+    if ([`^${r}`, `^${r}+`, `^${r}.*`].includes(pat)) return format('%s.startsWith(%j)', key, r)
+    if ([`${r}$`, `.*${r}$`].includes(pat)) return format('%s.endsWith(%j)', key, r)
+
+    const subr = [...r].slice(0, -1).join('') // without the last symbol, astral plane aware
+    if ([`${r}*`, `${r}?`].includes(pat))
+      return subr.length === 0 ? format('true') : format('%s.includes(%j)', key, subr) // abc*, abc? -> includes(ab)
+    if ([`^${r}*`, `^${r}?`].includes(pat))
+      return subr.length === 0 ? format('true') : format('%s.startsWith(%j)', key, subr) // ^abc*, ^abc? -> startsWith(ab)
+
+    // A normal reg-exp test
+    return format('%s.test(%s)', genpattern(pat), key)
+  }
+
+  const compare = (name, val) => {
+    if (!val || typeof val !== 'object') return format('%s === %j', name, val)
+
+    let type // type is needed for speedup only, deepEqual rechecks that
+    // small plain object/arrays are fast cases and we inline those instead of calling deepEqual
+    const shouldInline = (arr) => arr.length <= 3 && arr.every((x) => !x || typeof x !== 'object')
+    if (Array.isArray(val)) {
+      type = types.get('array')(name)
+      if (shouldInline(val)) {
+        let k = format('%s.length === %d', name, val.length)
+        for (let i = 0; i < val.length; i++) k = format('%s && %s[%d] === %j', k, name, i, val[i])
+        return format('%s && %s', type, k)
+      }
+    } else {
+      type = types.get('object')(name)
+      const [keys, values] = [Object.keys(val), Object.values(val)]
+      if (shouldInline(values)) {
+        let k = format('Object.keys(%s).length === %d', name, keys.length)
+        if (keys.length > 0) scope.hasOwn = functions.hasOwn
+        for (const key of keys) k = format('%s && hasOwn(%s, %j)', k, name, key)
+        for (const key of keys) k = format('%s && %s[%j] === %j', k, name, key, val[key])
+        return format('%s && %s', type, k)
+      }
+    }
+
+    scope.deepEqual = functions.deepEqual
+    return format('%s && deepEqual(%s, %j)', type, name, val)
+  }
+
+  return { present, forObjectKeys, forArray, patternTest, compare, propvar }
+}
+
+// Stringifcation of functions and regexps, for scope
+const isArrowFnWithParensRegex = /^\([^)]*\) *=>/
+const isArrowFnWithoutParensRegex = /^[^=]*=>/
+const toJayString = Symbol.for('toJayString')
+function jaystring(item) {
+  if (typeof item === 'function') {
+    if (item[toJayString]) return item[toJayString] // this is supported only for functions
+
+    if (Object.getPrototypeOf(item) !== Function.prototype)
+      throw new Error('Can not stringify: a function with unexpected prototype')
+
+    const stringified = `${item}`
+    if (item.prototype) {
+      if (!/^function[ (]/.test(stringified)) throw new Error('Unexpected function')
+      return stringified // normal function
+    }
+    if (isArrowFnWithParensRegex.test(stringified) || isArrowFnWithoutParensRegex.test(stringified))
+      return stringified // Arrow function
+
+    // Shortened ES6 object method declaration
+    throw new Error('Can not stringify: only either normal or arrow functions are supported')
+  } else if (typeof item === 'object') {
+    const proto = Object.getPrototypeOf(item)
+    if (item instanceof RegExp && proto === RegExp.prototype) return format('%r', item)
+    throw new Error('Can not stringify: an object with unexpected prototype')
+  }
+  throw new Error(`Can not stringify: unknown type ${typeof item}`)
+}
+
+module.exports = { types, buildName, jsHelpers, jaystring }
+
+
+/***/ }),
+
+/***/ 2139:
+/***/ ((module) => {
+
+"use strict";
+
+
+const knownKeywords = [
+  ...['$schema', '$vocabulary'], // version
+  ...['id', '$id', '$anchor', '$ref', 'definitions', '$defs'], // pointers
+  ...['$recursiveRef', '$recursiveAnchor', '$dynamicAnchor', '$dynamicRef'],
+  ...['type', 'required', 'default'], // generic
+  ...['enum', 'const'], // constant values
+  ...['not', 'allOf', 'anyOf', 'oneOf', 'if', 'then', 'else'], // logical checks
+  ...['maximum', 'minimum', 'exclusiveMaximum', 'exclusiveMinimum', 'multipleOf', 'divisibleBy'], // numbers
+  ...['items', 'maxItems', 'minItems', 'additionalItems', 'prefixItems'], // arrays, basic
+  ...['contains', 'minContains', 'maxContains', 'uniqueItems'], // arrays, complex
+  ...['maxLength', 'minLength', 'format', 'pattern'], // strings
+  ...['contentEncoding', 'contentMediaType', 'contentSchema'], // strings content
+  ...['properties', 'maxProperties', 'minProperties', 'additionalProperties', 'patternProperties'], // objects
+  ...['propertyNames'], // objects
+  ...['dependencies', 'dependentRequired', 'dependentSchemas', 'propertyDependencies'], // objects (dependencies)
+  ...['unevaluatedProperties', 'unevaluatedItems'], // see-through
+  // Unused meta keywords not affecting validation (annotations and comments)
+  // https://json-schema.org/understanding-json-schema/reference/generic.html
+  // https://json-schema.org/draft/2019-09/json-schema-validation.html#rfc.section.9
+  ...['title', 'description', 'deprecated', 'readOnly', 'writeOnly', 'examples', '$comment'], // unused meta
+  ...['example'], // unused meta, OpenAPI
+  'discriminator', // optimization hint and error filtering only, does not affect validation result
+  'removeAdditional', // optional keyword for { removeAdditional: 'keyword' } config, to target specific objects
+]
+
+// Order is important, newer first!
+const schemaDrafts = [
+  ...['draft/next'], // not recommended to use, might change / break in an unexpected way
+  ...['draft/2020-12', 'draft/2019-09'], // new
+  ...['draft-07', 'draft-06', 'draft-04', 'draft-03'], // historic
+]
+const schemaVersions = schemaDrafts.map((draft) => `https://json-schema.org/${draft}/schema`)
+
+const vocab2019 = ['core', 'applicator', 'validation', 'meta-data', 'format', 'content']
+const vocab2020 = [
+  ...['core', 'applicator', 'unevaluated', 'validation'],
+  ...['meta-data', 'format-annotation', 'format-assertion', 'content'],
+]
+const knownVocabularies = [
+  ...vocab2019.map((v) => `https://json-schema.org/draft/2019-09/vocab/${v}`),
+  ...vocab2020.map((v) => `https://json-schema.org/draft/2020-12/vocab/${v}`),
+]
+
+module.exports = { knownKeywords, schemaVersions, knownVocabularies }
+
+
+/***/ }),
+
+/***/ 7000:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+const { knownKeywords } = __nccwpck_require__(2139)
+
+function safeSet(map, key, value, comment = 'keys') {
+  if (!map.has(key)) return map.set(key, value)
+  if (map.get(key) !== value) throw new Error(`Conflicting duplicate ${comment}: ${key}`)
+}
+
+function untilde(string) {
+  if (!string.includes('~')) return string
+  return string.replace(/~[01]/g, (match) => {
+    switch (match) {
+      case '~1':
+        return '/'
+      case '~0':
+        return '~'
+    }
+    /* c8 ignore next */
+    throw new Error('Unreachable')
+  })
+}
+
+function get(obj, pointer, objpath) {
+  if (typeof obj !== 'object') throw new Error('Invalid input object')
+  if (typeof pointer !== 'string') throw new Error('Invalid JSON pointer')
+  const parts = pointer.split('/')
+  if (!['', '#'].includes(parts.shift())) throw new Error('Invalid JSON pointer')
+  if (parts.length === 0) return obj
+
+  let curr = obj
+  for (const part of parts) {
+    if (typeof part !== 'string') throw new Error('Invalid JSON pointer')
+    if (objpath) objpath.push(curr) // does not include target itself, but includes head
+    const prop = untilde(part)
+    if (typeof curr !== 'object') return undefined
+    if (!Object.prototype.hasOwnProperty.call(curr, prop)) return undefined
+    curr = curr[prop]
+  }
+  return curr
+}
+
+const protocolRegex = /^https?:\/\//
+
+function joinPath(baseFull, sub) {
+  if (typeof baseFull !== 'string' || typeof sub !== 'string') throw new Error('Unexpected path!')
+  if (sub.length === 0) return baseFull
+  const base = baseFull.replace(/#.*/, '')
+  if (sub.startsWith('#')) return `${base}${sub}`
+  if (!base.includes('/') || protocolRegex.test(sub)) return sub
+  if (protocolRegex.test(base)) return `${new URL(sub, base)}`
+  if (sub.startsWith('/')) return sub
+  return [...base.split('/').slice(0, -1), sub].join('/')
+}
+
+function objpath2path(objpath) {
+  const ids = objpath.map((obj) => (obj && (obj.$id || obj.id)) || '')
+  return ids.filter((id) => id && typeof id === 'string').reduce(joinPath, '')
+}
+
+const withSpecialChilds = ['properties', 'patternProperties', '$defs', 'definitions']
+const skipChilds = ['const', 'enum', 'examples', 'example', 'comment']
+const sSkip = Symbol('skip')
+
+function traverse(schema, work) {
+  const visit = (sub, specialChilds = false) => {
+    if (!sub || typeof sub !== 'object') return
+    const res = work(sub)
+    if (res !== undefined) return res === sSkip ? undefined : res
+    for (const k of Object.keys(sub)) {
+      if (!specialChilds && !Array.isArray(sub) && !knownKeywords.includes(k)) continue
+      if (!specialChilds && skipChilds.includes(k)) continue
+      const kres = visit(sub[k], !specialChilds && withSpecialChilds.includes(k))
+      if (kres !== undefined) return kres
+    }
+  }
+  return visit(schema)
+}
+
+// Returns a list of resolved entries, in a form: [schema, root, basePath]
+// basePath doesn't contain the target object $id itself
+function resolveReference(root, schemas, ref, base = '') {
+  const ptr = joinPath(base, ref)
+  const results = []
+
+  const [main, hash = ''] = ptr.split('#')
+  const local = decodeURI(hash).replace(/\/$/, '')
+
+  // Find in self by id path
+  const visit = (sub, oldPath, specialChilds = false, dynamic = false) => {
+    if (!sub || typeof sub !== 'object') return
+
+    const id = sub.$id || sub.id
+    let path = oldPath
+    if (id && typeof id === 'string') {
+      path = joinPath(path, id)
+      if (path === ptr || (path === main && local === '')) {
+        results.push([sub, root, oldPath])
+      } else if (path === main && local[0] === '/') {
+        const objpath = []
+        const res = get(sub, local, objpath)
+        if (res !== undefined) results.push([res, root, joinPath(oldPath, objpath2path(objpath))])
+      }
+    }
+    const anchor = dynamic ? sub.$dynamicAnchor : sub.$anchor
+    if (anchor && typeof anchor === 'string') {
+      if (anchor.includes('#')) throw new Error("$anchor can't include '#'")
+      if (anchor.startsWith('/')) throw new Error("$anchor can't start with '/'")
+      path = joinPath(path, `#${anchor}`)
+      if (path === ptr) results.push([sub, root, oldPath])
+    }
+
+    for (const k of Object.keys(sub)) {
+      if (!specialChilds && !Array.isArray(sub) && !knownKeywords.includes(k)) continue
+      if (!specialChilds && skipChilds.includes(k)) continue
+      visit(sub[k], path, !specialChilds && withSpecialChilds.includes(k))
+    }
+    if (!dynamic && sub.$dynamicAnchor) visit(sub, oldPath, specialChilds, true)
+  }
+  visit(root, main)
+
+  // Find in self by pointer
+  if (main === base.replace(/#$/, '') && (local[0] === '/' || local === '')) {
+    const objpath = []
+    const res = get(root, local, objpath)
+    if (res !== undefined) results.push([res, root, objpath2path(objpath)])
+  }
+
+  // Find in additional schemas
+  if (schemas.has(main) && schemas.get(main) !== root) {
+    const additional = resolveReference(schemas.get(main), schemas, `#${hash}`, main)
+    results.push(...additional.map(([res, rRoot, rPath]) => [res, rRoot, joinPath(main, rPath)]))
+  }
+
+  // Full refs to additional schemas
+  if (schemas.has(ptr)) results.push([schemas.get(ptr), schemas.get(ptr), ptr])
+
+  return results
+}
+
+function getDynamicAnchors(schema) {
+  const results = new Map()
+  traverse(schema, (sub) => {
+    if (sub !== schema && (sub.$id || sub.id)) return sSkip // base changed, no longer in the same resource
+    const anchor = sub.$dynamicAnchor
+    if (anchor && typeof anchor === 'string') {
+      if (anchor.includes('#')) throw new Error("$dynamicAnchor can't include '#'")
+      if (!/^[a-zA-Z0-9_-]+$/.test(anchor)) throw new Error(`Unsupported $dynamicAnchor: ${anchor}`)
+      safeSet(results, anchor, sub, '$dynamicAnchor')
+    }
+  })
+  return results
+}
+
+const hasKeywords = (schema, keywords) =>
+  traverse(schema, (s) => Object.keys(s).some((k) => keywords.includes(k)) || undefined) || false
+
+const addSchemasArrayToMap = (schemas, input, optional = false) => {
+  if (!Array.isArray(input)) throw new Error('Expected an array of schemas')
+  // schema ids are extracted from the schemas themselves
+  for (const schema of input) {
+    traverse(schema, (sub) => {
+      const idRaw = sub.$id || sub.id
+      const id = idRaw && typeof idRaw === 'string' ? idRaw.replace(/#$/, '') : null // # is allowed only as the last symbol here
+      if (id && id.includes('://') && !id.includes('#')) {
+        safeSet(schemas, id, sub, "schema $id in 'schemas'")
+      } else if (sub === schema && !optional) {
+        throw new Error("Schema with missing or invalid $id in 'schemas'")
+      }
+    })
+  }
+  return schemas
+}
+
+const buildSchemas = (input, extra) => {
+  if (extra) return addSchemasArrayToMap(buildSchemas(input), extra, true)
+  if (input) {
+    switch (Object.getPrototypeOf(input)) {
+      case Object.prototype:
+        return new Map(Object.entries(input))
+      case Map.prototype:
+        return new Map(input)
+      case Array.prototype:
+        return addSchemasArrayToMap(new Map(), input)
+    }
+  }
+  throw new Error("Unexpected value for 'schemas' option")
+}
+
+module.exports = { get, joinPath, resolveReference, getDynamicAnchors, hasKeywords, buildSchemas }
+
+
+/***/ }),
+
+/***/ 2944:
+/***/ ((module) => {
+
+"use strict";
+
+
+class SafeString extends String {} // used for instanceof checks
+
+const compares = new Set(['<', '>', '<=', '>='])
+const escapeCode = (code) => `\\u${code.toString(16).padStart(4, '0')}`
+
+// Supports simple js variables only, i.e. constants and JSON-stringifiable
+// Converts a variable to be safe for inclusion in JS context
+// This works on top of JSON.stringify with minor fixes to negate the JS/JSON parsing differences
+const jsval = (val) => {
+  if ([Infinity, -Infinity, NaN, undefined, null].includes(val)) return `${val}`
+  const primitive = ['string', 'boolean', 'number'].includes(typeof val)
+  if (!primitive) {
+    if (typeof val !== 'object') throw new Error('Unexpected value type')
+    const proto = Object.getPrototypeOf(val)
+    const ok = (proto === Array.prototype && Array.isArray(val)) || proto === Object.prototype
+    if (!ok) throw new Error('Unexpected object given as value')
+  }
+  return (
+    JSON.stringify(val)
+      // JSON context and JS eval context have different handling of __proto__ property name
+      // Refs: https://www.ecma-international.org/ecma-262/#sec-json.parse
+      // Refs: https://www.ecma-international.org/ecma-262/#sec-__proto__-property-names-in-object-initializers
+      // Replacement is safe because it's the only way that encodes __proto__ property in JSON and
+      // it can't occur inside strings or other properties, due to the leading `"` and traling `":`
+      .replace(/([{,])"__proto__":/g, '$1["__proto__"]:')
+      // The above line should cover all `"__proto__":` occurances except for `"...\"__proto__":`
+      .replace(/[^\\]"__proto__":/g, () => {
+        /* c8 ignore next */
+        throw new Error('Unreachable')
+      })
+      // https://v8.dev/features/subsume-json#security, e.g. {'\u2028':0} on Node.js 8
+      .replace(/[\u2028\u2029]/g, (char) => escapeCode(char.charCodeAt(0)))
+  )
+}
+
+const format = (fmt, ...args) => {
+  const res = fmt.replace(/%[%drscjw]/g, (match) => {
+    if (match === '%%') return '%'
+    if (args.length === 0) throw new Error('Unexpected arguments count')
+    const val = args.shift()
+    switch (match) {
+      case '%d':
+        if (typeof val === 'number') return val
+        throw new Error('Expected a number')
+      case '%r':
+        // String(regex) is not ok on Node.js 10 and below: console.log(String(new RegExp('\n')))
+        if (val instanceof RegExp) return format('new RegExp(%j, %j)', val.source, val.flags)
+        throw new Error('Expected a RegExp instance')
+      case '%s':
+        if (val instanceof SafeString) return val
+        throw new Error('Expected a safe string')
+      case '%c':
+        if (compares.has(val)) return val
+        throw new Error('Expected a compare op')
+      case '%j':
+        return jsval(val)
+      case '%w':
+        if (Number.isInteger(val) && val >= 0) return ' '.repeat(val)
+        throw new Error('Expected a non-negative integer for indentation')
+    }
+    /* c8 ignore next */
+    throw new Error('Unreachable')
+  })
+  if (args.length !== 0) throw new Error('Unexpected arguments count')
+  return new SafeString(res)
+}
+
+const safe = (string) => {
+  if (!/^[a-z][a-z0-9_]*$/i.test(string)) throw new Error('Does not look like a safe id')
+  return new SafeString(string)
+}
+
+// too dangereous to export, use with care
+const safewrap = (fun) => (...args) => {
+  if (!args.every((arg) => arg instanceof SafeString)) throw new Error('Unsafe arguments')
+  return new SafeString(fun(...args))
+}
+
+const safepriority = (arg) =>
+  // simple expression and single brackets can not break priority
+  /^[a-z][a-z0-9_().]*$/i.test(arg) || /^\([^()]+\)$/i.test(arg) ? arg : format('(%s)', arg)
+const safeor = safewrap(
+  (...args) => (args.some((arg) => `${arg}` === 'true') ? 'true' : args.join(' || ') || 'false')
+)
+const safeand = safewrap(
+  (...args) => (args.some((arg) => `${arg}` === 'false') ? 'false' : args.join(' && ') || 'true')
+)
+const safenot = (arg) => {
+  if (`${arg}` === 'true') return safe('false')
+  if (`${arg}` === 'false') return safe('true')
+  return format('!%s', safepriority(arg))
+}
+// this function is priority-safe, unlike safeor, hence it's exported and safeor is not atm
+const safenotor = (...args) => safenot(safeor(...args))
+
+module.exports = { format, safe, safeand, safenot, safenotor }
+
+
+/***/ }),
+
+/***/ 1150:
+/***/ ((module) => {
+
+"use strict";
+
+
+// for correct Unicode code points processing
+// https://mathiasbynens.be/notes/javascript-unicode#accounting-for-astral-symbols
+const stringLength = (string) =>
+  /[\uD800-\uDFFF]/.test(string) ? [...string].length : string.length
+
+// A isMultipleOf B: shortest decimal denoted as A % shortest decimal denoted as B === 0
+// Optimized, coherence checks and precomputation are outside of this method
+// If we get an Infinity when we multiply by the factor (which is always a power of 10), we just undo that instead of always returning false
+const isMultipleOf = (value, divisor, factor, factorMultiple) => {
+  if (value % divisor === 0) return true
+  let multiple = value * factor
+  if (multiple === Infinity || multiple === -Infinity) multiple = value
+  if (multiple % factorMultiple === 0) return true
+  const normal = Math.floor(multiple + 0.5)
+  return normal / factor === value && normal % factorMultiple === 0
+}
+
+// supports only JSON-stringifyable objects, defaults to false for unsupported
+// also uses ===, not Object.is, i.e. 0 === -0, NaN !== NaN
+// symbols and non-enumerable properties are ignored!
+const deepEqual = (obj, obj2) => {
+  if (obj === obj2) return true
+  if (!obj || !obj2 || typeof obj !== typeof obj2) return false
+  if (obj !== obj2 && typeof obj !== 'object') return false
+
+  const proto = Object.getPrototypeOf(obj)
+  if (proto !== Object.getPrototypeOf(obj2)) return false
+
+  if (proto === Array.prototype) {
+    if (!Array.isArray(obj) || !Array.isArray(obj2)) return false
+    if (obj.length !== obj2.length) return false
+    return obj.every((x, i) => deepEqual(x, obj2[i]))
+  } else if (proto === Object.prototype) {
+    const [keys, keys2] = [Object.keys(obj), Object.keys(obj2)]
+    if (keys.length !== keys2.length) return false
+    const keyset2 = new Set([...keys, ...keys2])
+    return keyset2.size === keys.length && keys.every((key) => deepEqual(obj[key], obj2[key]))
+  }
+  return false
+}
+
+const unique = (array) => {
+  if (array.length < 2) return true
+  if (array.length === 2) return !deepEqual(array[0], array[1])
+  const objects = []
+  const primitives = array.length > 20 ? new Set() : null
+  let primitivesCount = 0
+  let pos = 0
+  for (const item of array) {
+    if (typeof item === 'object') {
+      objects.push(item)
+    } else if (primitives) {
+      primitives.add(item)
+      if (primitives.size !== ++primitivesCount) return false
+    } else {
+      if (array.indexOf(item, pos + 1) !== -1) return false
+    }
+    pos++
+  }
+  for (let i = 1; i < objects.length; i++)
+    for (let j = 0; j < i; j++) if (deepEqual(objects[i], objects[j])) return false
+  return true
+}
+
+const deBase64 = (string) => {
+  if (typeof Buffer !== 'undefined') return Buffer.from(string, 'base64').toString('utf-8')
+  const b = atob(string)
+  return new TextDecoder('utf-8').decode(new Uint8Array(b.length).map((_, i) => b.charCodeAt(i)))
+}
+
+const hasOwn = Function.prototype.call.bind(Object.prototype.hasOwnProperty)
+// special handling for stringification
+hasOwn[Symbol.for('toJayString')] = 'Function.prototype.call.bind(Object.prototype.hasOwnProperty)'
+
+// Used for error generation. Affects error performance, optimized
+const pointerPart = (s) => (/~\//.test(s) ? `${s}`.replace(/~/g, '~0').replace(/\//g, '~1') : s)
+const toPointer = (path) => (path.length === 0 ? '#' : `#/${path.map(pointerPart).join('/')}`)
+
+const errorMerge = ({ keywordLocation, instanceLocation }, schemaBase, dataBase) => ({
+  keywordLocation: `${schemaBase}${keywordLocation.slice(1)}`,
+  instanceLocation: `${dataBase}${instanceLocation.slice(1)}`,
+})
+
+const propertyIn = (key, [properties, patterns]) =>
+  properties.includes(true) ||
+  properties.some((prop) => prop === key) ||
+  patterns.some((pattern) => new RegExp(pattern, 'u').test(key))
+
+// id is verified to start with '#' at compile time, hence using plain objects is safe
+const dynamicResolve = (anchors, id) => (anchors.filter((x) => x[id])[0] || {})[id]
+
+const extraUtils = { toPointer, pointerPart, errorMerge, propertyIn, dynamicResolve }
+module.exports = { stringLength, isMultipleOf, deepEqual, unique, deBase64, hasOwn, ...extraUtils }
+
+
+/***/ }),
+
+/***/ 7623:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+
+const { safe } = __nccwpck_require__(2944)
+
+const caches = new WeakMap()
+
+const scopeMethods = (scope) => {
+  // cache meta info for known scope variables, per meta type
+  if (!caches.has(scope))
+    caches.set(scope, { sym: new Map(), ref: new Map(), format: new Map(), pattern: new Map() })
+  const cache = caches.get(scope)
+
+  const gensym = (name) => {
+    if (!cache.sym.get(name)) cache.sym.set(name, 0)
+    const index = cache.sym.get(name)
+    cache.sym.set(name, index + 1)
+    return safe(`${name}${index}`)
+  }
+
+  const genpattern = (p) => {
+    if (cache.pattern.has(p)) return cache.pattern.get(p)
+    const n = gensym('pattern')
+    scope[n] = new RegExp(p, 'u')
+    cache.pattern.set(p, n)
+    return n
+  }
+
+  if (!cache.loop) cache.loop = 'ijklmnopqrstuvxyz'.split('')
+  const genloop = () => {
+    const v = cache.loop.shift()
+    cache.loop.push(`${v}${v[0]}`)
+    return safe(v)
+  }
+
+  const getref = (sub) => cache.ref.get(sub)
+  const genref = (sub) => {
+    const n = gensym('ref')
+    cache.ref.set(sub, n)
+    return n
+  }
+
+  const genformat = (impl) => {
+    let n = cache.format.get(impl)
+    if (!n) {
+      n = gensym('format')
+      scope[n] = impl
+      cache.format.set(impl, n)
+    }
+    return n
+  }
+
+  return { gensym, genpattern, genloop, getref, genref, genformat }
+}
+
+module.exports = { scopeMethods }
+
+
+/***/ }),
+
+/***/ 926:
+/***/ ((module) => {
+
+"use strict";
+
+
+/* This file implements operations for static tracing of evaluated items/properties, which is also
+ * used to determine whether dynamic evaluated tracing is required or the schema can be compiled
+ * with only statical checks.
+ *
+ * That is done by keeping track of evaluated and potentially evaluated and accounting to that
+ * while doing merges and intersections.
+ *
+ * isDynamic() checks that all potentially evaluated are also definitely evaluated, seperately
+ * for items and properties, for use with unevaluatedItems and unevaluatedProperties.
+ *
+ * WARNING: it is important that this doesn't produce invalid information. i.e.:
+ *  * Extra properties or patterns, too high items
+ *  * Missing dyn.properties or dyn.patterns, too low dyn.items
+ *  * Extra fullstring flag or required entries
+ *  * Missing types, if type is present
+ *  * Missing unknown or dyn.item
+ *
+ * The other way around is non-optimal but safe.
+ *
+ * null means any type (i.e. any type is possible, not validated)
+ * true in properties means any property (i.e. all properties were evaluated)
+ * fullstring means that the object is not an unvalidated string (i.e. is either validated or not a string)
+ * unknown means that there could be evaluated items or properties unknown to both top-level or dyn
+ * dyn.item (bool) means there could be possible specific evaluated items, e.g. from "contains".
+ *
+ * For normalization:
+ *   1. If type is applicable:
+ *     * dyn.items >= items,
+ *     * dyn.properties includes properties
+ *     * dyn.patterns includes patterns.
+ *   2. If type is not applicable, the following rules apply:
+ *     * `fullstring = true` if `string` type is not applicable
+ *     * `items = Infinity`, `dyn.item = false`, `dyn.items = 0` if `array` type is not applicable
+ *     * `properties = [true]`, `dyn.properties = []` if `object` type is not applicable
+ *     * `patterns = dyn.patterns = []` if `object` type is not applicable
+ *     * `required = []` if `object` type is not applicable
+ *
+ * That allows to simplify the `or` operation.
+ */
+
+const merge = (a, b) => [...new Set([...a, ...b])].sort()
+const intersect = (a, b) => a.filter((x) => b.includes(x))
+const wrapArgs = (f) => (...args) => f(...args.map(normalize))
+const wrapFull = (f) => (...args) => normalize(f(...args.map(normalize)))
+const typeIsNot = (type, t) => type && !type.includes(t) // type=null means any and includes anything
+
+const normalize = ({ type = null, dyn: d = {}, ...A }) => ({
+  type: type ? [...type].sort() : type,
+  items: typeIsNot(type, 'array') ? Infinity : A.items || 0,
+  properties: typeIsNot(type, 'object') ? [true] : [...(A.properties || [])].sort(),
+  patterns: typeIsNot(type, 'object') ? [] : [...(A.patterns || [])].sort(),
+  required: typeIsNot(type, 'object') ? [] : [...(A.required || [])].sort(),
+  fullstring: typeIsNot(type, 'string') || A.fullstring || false,
+  dyn: {
+    item: typeIsNot(type, 'array') ? false : d.item || false,
+    items: typeIsNot(type, 'array') ? 0 : Math.max(A.items || 0, d.items || 0),
+    properties: typeIsNot(type, 'object') ? [] : merge(A.properties || [], d.properties || []),
+    patterns: typeIsNot(type, 'object') ? [] : merge(A.patterns || [], d.patterns || []),
+  },
+  unknown: (A.unknown && !(typeIsNot(type, 'object') && typeIsNot(type, 'array'))) || false,
+})
+
+const initTracing = () => normalize({})
+
+// Result means that both sets A and B are correct
+// type is intersected, lists of known properties are merged
+const andDelta = wrapFull((A, B) => ({
+  type: A.type && B.type ? intersect(A.type, B.type) : A.type || B.type || null,
+  items: Math.max(A.items, B.items),
+  properties: merge(A.properties, B.properties),
+  patterns: merge(A.patterns, B.patterns),
+  required: merge(A.required, B.required),
+  fullstring: A.fullstring || B.fullstring,
+  dyn: {
+    item: A.dyn.item || B.dyn.item,
+    items: Math.max(A.dyn.items, B.dyn.items),
+    properties: merge(A.dyn.properties, B.dyn.properties),
+    patterns: merge(A.dyn.patterns, B.dyn.patterns),
+  },
+  unknown: A.unknown || B.unknown,
+}))
+
+const regtest = (pattern, value) => value !== true && new RegExp(pattern, 'u').test(value)
+
+const intersectProps = ({ properties: a, patterns: rega }, { properties: b, patterns: regb }) => {
+  // properties
+  const af = a.filter((x) => b.includes(x) || b.includes(true) || regb.some((p) => regtest(p, x)))
+  const bf = b.filter((x) => a.includes(x) || a.includes(true) || rega.some((p) => regtest(p, x)))
+  // patterns
+  const ar = rega.filter((x) => regb.includes(x) || b.includes(true))
+  const br = regb.filter((x) => rega.includes(x) || a.includes(true))
+  return { properties: merge(af, bf), patterns: merge(ar, br) }
+}
+
+const inProperties = ({ properties: a, patterns: rega }, { properties: b, patterns: regb }) =>
+  b.every((x) => a.includes(x) || a.includes(true) || rega.some((p) => regtest(p, x))) &&
+  regb.every((x) => rega.includes(x) || a.includes(true))
+
+// Result means that at least one of sets A and B is correct
+// type is merged, lists of known properties are intersected, lists of dynamic properties are merged
+const orDelta = wrapFull((A, B) => ({
+  type: A.type && B.type ? merge(A.type, B.type) : null,
+  items: Math.min(A.items, B.items),
+  ...intersectProps(A, B),
+  required:
+    (typeIsNot(A.type, 'object') && B.required) ||
+    (typeIsNot(B.type, 'object') && A.required) ||
+    intersect(A.required, B.required),
+  fullstring: A.fullstring && B.fullstring,
+  dyn: {
+    item: A.dyn.item || B.dyn.item,
+    items: Math.max(A.dyn.items, B.dyn.items),
+    properties: merge(A.dyn.properties, B.dyn.properties),
+    patterns: merge(A.dyn.patterns, B.dyn.patterns),
+  },
+  unknown: A.unknown || B.unknown,
+}))
+
+const applyDelta = (stat, delta) => Object.assign(stat, andDelta(stat, delta))
+
+const isDynamic = wrapArgs(({ unknown, items, dyn, ...stat }) => ({
+  items: items !== Infinity && (unknown || dyn.items > items || dyn.item),
+  properties: !stat.properties.includes(true) && (unknown || !inProperties(stat, dyn)),
+}))
+
+module.exports = { initTracing, andDelta, orDelta, applyDelta, isDynamic, inProperties }
+
 
 /***/ }),
 
@@ -4900,18 +8085,9 @@ function copySync (src, dest, opts) {
 
   const { srcStat, destStat } = stat.checkPathsSync(src, dest, 'copy', opts)
   stat.checkParentPathsSync(src, srcStat, dest, 'copy')
-  return handleFilterAndCopy(destStat, src, dest, opts)
-}
-
-function handleFilterAndCopy (destStat, src, dest, opts) {
   if (opts.filter && !opts.filter(src, dest)) return
   const destParent = path.dirname(dest)
   if (!fs.existsSync(destParent)) mkdirsSync(destParent)
-  return getStats(destStat, src, dest, opts)
-}
-
-function startCopy (destStat, src, dest, opts) {
-  if (opts.filter && !opts.filter(src, dest)) return
   return getStats(destStat, src, dest, opts)
 }
 
@@ -4995,8 +8171,9 @@ function copyDir (src, dest, opts) {
 function copyDirItem (item, src, dest, opts) {
   const srcItem = path.join(src, item)
   const destItem = path.join(dest, item)
+  if (opts.filter && !opts.filter(srcItem, destItem)) return
   const { destStat } = stat.checkPathsSync(srcItem, destItem, 'copy', opts)
-  return startCopy(destStat, srcItem, destItem, opts)
+  return getStats(destStat, srcItem, destItem, opts)
 }
 
 function onLink (destStat, src, dest, opts) {
@@ -5028,7 +8205,7 @@ function onLink (destStat, src, dest, opts) {
     // prevent copy if src is a subdir of dest since unlinking
     // dest in this case would result in removing src contents
     // and therefore a broken symlink would be created.
-    if (fs.statSync(dest).isDirectory() && stat.isSrcSubdir(resolvedDest, resolvedSrc)) {
+    if (stat.isSrcSubdir(resolvedDest, resolvedSrc)) {
       throw new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`)
     }
     return copyLink(resolvedSrc, dest)
@@ -5086,8 +8263,12 @@ function copy (src, dest, opts, cb) {
     const { srcStat, destStat } = stats
     stat.checkParentPaths(src, srcStat, dest, 'copy', err => {
       if (err) return cb(err)
-      if (opts.filter) return handleFilter(checkParentDir, destStat, src, dest, opts, cb)
-      return checkParentDir(destStat, src, dest, opts, cb)
+      runFilter(src, dest, opts, (err, include) => {
+        if (err) return cb(err)
+        if (!include) return cb()
+
+        checkParentDir(destStat, src, dest, opts, cb)
+      })
     })
   })
 }
@@ -5104,16 +8285,10 @@ function checkParentDir (destStat, src, dest, opts, cb) {
   })
 }
 
-function handleFilter (onInclude, destStat, src, dest, opts, cb) {
-  Promise.resolve(opts.filter(src, dest)).then(include => {
-    if (include) return onInclude(destStat, src, dest, opts, cb)
-    return cb()
-  }, error => cb(error))
-}
-
-function startCopy (destStat, src, dest, opts, cb) {
-  if (opts.filter) return handleFilter(getStats, destStat, src, dest, opts, cb)
-  return getStats(destStat, src, dest, opts, cb)
+function runFilter (src, dest, opts, cb) {
+  if (!opts.filter) return cb(null, true)
+  Promise.resolve(opts.filter(src, dest))
+    .then(include => cb(null, include), error => cb(error))
 }
 
 function getStats (destStat, src, dest, opts, cb) {
@@ -5229,12 +8404,17 @@ function copyDirItems (items, src, dest, opts, cb) {
 function copyDirItem (items, item, src, dest, opts, cb) {
   const srcItem = path.join(src, item)
   const destItem = path.join(dest, item)
-  stat.checkPaths(srcItem, destItem, 'copy', opts, (err, stats) => {
+  runFilter(srcItem, destItem, opts, (err, include) => {
     if (err) return cb(err)
-    const { destStat } = stats
-    startCopy(destStat, srcItem, destItem, opts, err => {
+    if (!include) return copyDirItems(items, src, dest, opts, cb)
+
+    stat.checkPaths(srcItem, destItem, 'copy', opts, (err, stats) => {
       if (err) return cb(err)
-      return copyDirItems(items, src, dest, opts, cb)
+      const { destStat } = stats
+      getStats(destStat, srcItem, destItem, opts, err => {
+        if (err) return cb(err)
+        return copyDirItems(items, src, dest, opts, cb)
+      })
     })
   })
 }
@@ -5267,7 +8447,7 @@ function onLink (destStat, src, dest, opts, cb) {
         // do not copy if src is a subdir of dest since unlinking
         // dest in this case would result in removing src contents
         // and therefore a broken symlink would be created.
-        if (destStat.isDirectory() && stat.isSrcSubdir(resolvedDest, resolvedSrc)) {
+        if (stat.isSrcSubdir(resolvedDest, resolvedSrc)) {
           return cb(new Error(`Cannot overwrite '${resolvedDest}' with '${resolvedSrc}'.`))
         }
         return copyLink(resolvedSrc, dest, cb)
@@ -5813,8 +8993,7 @@ const api = [
   'writeFile'
 ].filter(key => {
   // Some commands are not available on some systems. Ex:
-  // fs.opendir was added in Node.js v12.12.0
-  // fs.rm was added in Node.js v14.14.0
+  // fs.cp was added in Node.js v16.7.0
   // fs.lchown is not available on at least some Linux
   return typeof fs[key] === 'function'
 })
@@ -5838,7 +9017,7 @@ exports.exists = function (filename, callback) {
   })
 }
 
-// fs.read(), fs.write(), & fs.writev() need special treatment due to multiple callback args
+// fs.read(), fs.write(), fs.readv(), & fs.writev() need special treatment due to multiple callback args
 
 exports.read = function (fd, buffer, offset, length, position, callback) {
   if (typeof callback === 'function') {
@@ -5870,23 +9049,36 @@ exports.write = function (fd, buffer, ...args) {
   })
 }
 
-// fs.writev only available in Node v12.9.0+
-if (typeof fs.writev === 'function') {
-  // Function signature is
-  // s.writev(fd, buffers[, position], callback)
-  // We need to handle the optional arg, so we use ...args
-  exports.writev = function (fd, buffers, ...args) {
-    if (typeof args[args.length - 1] === 'function') {
-      return fs.writev(fd, buffers, ...args)
-    }
-
-    return new Promise((resolve, reject) => {
-      fs.writev(fd, buffers, ...args, (err, bytesWritten, buffers) => {
-        if (err) return reject(err)
-        resolve({ bytesWritten, buffers })
-      })
-    })
+// Function signature is
+// s.readv(fd, buffers[, position], callback)
+// We need to handle the optional arg, so we use ...args
+exports.readv = function (fd, buffers, ...args) {
+  if (typeof args[args.length - 1] === 'function') {
+    return fs.readv(fd, buffers, ...args)
   }
+
+  return new Promise((resolve, reject) => {
+    fs.readv(fd, buffers, ...args, (err, bytesRead, buffers) => {
+      if (err) return reject(err)
+      resolve({ bytesRead, buffers })
+    })
+  })
+}
+
+// Function signature is
+// s.writev(fd, buffers[, position], callback)
+// We need to handle the optional arg, so we use ...args
+exports.writev = function (fd, buffers, ...args) {
+  if (typeof args[args.length - 1] === 'function') {
+    return fs.writev(fd, buffers, ...args)
+  }
+
+  return new Promise((resolve, reject) => {
+    fs.writev(fd, buffers, ...args, (err, bytesWritten, buffers) => {
+      if (err) return reject(err)
+      resolve({ bytesWritten, buffers })
+    })
+  })
 }
 
 // fs.realpath.native sometimes not available if fs is monkey-patched
@@ -6331,334 +9523,19 @@ module.exports = {
 
 const fs = __nccwpck_require__(7758)
 const u = (__nccwpck_require__(9046).fromCallback)
-const rimraf = __nccwpck_require__(8761)
 
 function remove (path, callback) {
-  // Node 14.14.0+
-  if (fs.rm) return fs.rm(path, { recursive: true, force: true }, callback)
-  rimraf(path, callback)
+  fs.rm(path, { recursive: true, force: true }, callback)
 }
 
 function removeSync (path) {
-  // Node 14.14.0+
-  if (fs.rmSync) return fs.rmSync(path, { recursive: true, force: true })
-  rimraf.sync(path)
+  fs.rmSync(path, { recursive: true, force: true })
 }
 
 module.exports = {
   remove: u(remove),
   removeSync
 }
-
-
-/***/ }),
-
-/***/ 8761:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-const fs = __nccwpck_require__(7758)
-const path = __nccwpck_require__(1017)
-const assert = __nccwpck_require__(9491)
-
-const isWindows = (process.platform === 'win32')
-
-function defaults (options) {
-  const methods = [
-    'unlink',
-    'chmod',
-    'stat',
-    'lstat',
-    'rmdir',
-    'readdir'
-  ]
-  methods.forEach(m => {
-    options[m] = options[m] || fs[m]
-    m = m + 'Sync'
-    options[m] = options[m] || fs[m]
-  })
-
-  options.maxBusyTries = options.maxBusyTries || 3
-}
-
-function rimraf (p, options, cb) {
-  let busyTries = 0
-
-  if (typeof options === 'function') {
-    cb = options
-    options = {}
-  }
-
-  assert(p, 'rimraf: missing path')
-  assert.strictEqual(typeof p, 'string', 'rimraf: path should be a string')
-  assert.strictEqual(typeof cb, 'function', 'rimraf: callback function required')
-  assert(options, 'rimraf: invalid options argument provided')
-  assert.strictEqual(typeof options, 'object', 'rimraf: options should be object')
-
-  defaults(options)
-
-  rimraf_(p, options, function CB (er) {
-    if (er) {
-      if ((er.code === 'EBUSY' || er.code === 'ENOTEMPTY' || er.code === 'EPERM') &&
-          busyTries < options.maxBusyTries) {
-        busyTries++
-        const time = busyTries * 100
-        // try again, with the same exact callback as this one.
-        return setTimeout(() => rimraf_(p, options, CB), time)
-      }
-
-      // already gone
-      if (er.code === 'ENOENT') er = null
-    }
-
-    cb(er)
-  })
-}
-
-// Two possible strategies.
-// 1. Assume it's a file.  unlink it, then do the dir stuff on EPERM or EISDIR
-// 2. Assume it's a directory.  readdir, then do the file stuff on ENOTDIR
-//
-// Both result in an extra syscall when you guess wrong.  However, there
-// are likely far more normal files in the world than directories.  This
-// is based on the assumption that a the average number of files per
-// directory is >= 1.
-//
-// If anyone ever complains about this, then I guess the strategy could
-// be made configurable somehow.  But until then, YAGNI.
-function rimraf_ (p, options, cb) {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  // sunos lets the root user unlink directories, which is... weird.
-  // so we have to lstat here and make sure it's not a dir.
-  options.lstat(p, (er, st) => {
-    if (er && er.code === 'ENOENT') {
-      return cb(null)
-    }
-
-    // Windows can EPERM on stat.  Life is suffering.
-    if (er && er.code === 'EPERM' && isWindows) {
-      return fixWinEPERM(p, options, er, cb)
-    }
-
-    if (st && st.isDirectory()) {
-      return rmdir(p, options, er, cb)
-    }
-
-    options.unlink(p, er => {
-      if (er) {
-        if (er.code === 'ENOENT') {
-          return cb(null)
-        }
-        if (er.code === 'EPERM') {
-          return (isWindows)
-            ? fixWinEPERM(p, options, er, cb)
-            : rmdir(p, options, er, cb)
-        }
-        if (er.code === 'EISDIR') {
-          return rmdir(p, options, er, cb)
-        }
-      }
-      return cb(er)
-    })
-  })
-}
-
-function fixWinEPERM (p, options, er, cb) {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  options.chmod(p, 0o666, er2 => {
-    if (er2) {
-      cb(er2.code === 'ENOENT' ? null : er)
-    } else {
-      options.stat(p, (er3, stats) => {
-        if (er3) {
-          cb(er3.code === 'ENOENT' ? null : er)
-        } else if (stats.isDirectory()) {
-          rmdir(p, options, er, cb)
-        } else {
-          options.unlink(p, cb)
-        }
-      })
-    }
-  })
-}
-
-function fixWinEPERMSync (p, options, er) {
-  let stats
-
-  assert(p)
-  assert(options)
-
-  try {
-    options.chmodSync(p, 0o666)
-  } catch (er2) {
-    if (er2.code === 'ENOENT') {
-      return
-    } else {
-      throw er
-    }
-  }
-
-  try {
-    stats = options.statSync(p)
-  } catch (er3) {
-    if (er3.code === 'ENOENT') {
-      return
-    } else {
-      throw er
-    }
-  }
-
-  if (stats.isDirectory()) {
-    rmdirSync(p, options, er)
-  } else {
-    options.unlinkSync(p)
-  }
-}
-
-function rmdir (p, options, originalEr, cb) {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  // try to rmdir first, and only readdir on ENOTEMPTY or EEXIST (SunOS)
-  // if we guessed wrong, and it's not a directory, then
-  // raise the original error.
-  options.rmdir(p, er => {
-    if (er && (er.code === 'ENOTEMPTY' || er.code === 'EEXIST' || er.code === 'EPERM')) {
-      rmkids(p, options, cb)
-    } else if (er && er.code === 'ENOTDIR') {
-      cb(originalEr)
-    } else {
-      cb(er)
-    }
-  })
-}
-
-function rmkids (p, options, cb) {
-  assert(p)
-  assert(options)
-  assert(typeof cb === 'function')
-
-  options.readdir(p, (er, files) => {
-    if (er) return cb(er)
-
-    let n = files.length
-    let errState
-
-    if (n === 0) return options.rmdir(p, cb)
-
-    files.forEach(f => {
-      rimraf(path.join(p, f), options, er => {
-        if (errState) {
-          return
-        }
-        if (er) return cb(errState = er)
-        if (--n === 0) {
-          options.rmdir(p, cb)
-        }
-      })
-    })
-  })
-}
-
-// this looks simpler, and is strictly *faster*, but will
-// tie up the JavaScript thread and fail on excessively
-// deep directory trees.
-function rimrafSync (p, options) {
-  let st
-
-  options = options || {}
-  defaults(options)
-
-  assert(p, 'rimraf: missing path')
-  assert.strictEqual(typeof p, 'string', 'rimraf: path should be a string')
-  assert(options, 'rimraf: missing options')
-  assert.strictEqual(typeof options, 'object', 'rimraf: options should be object')
-
-  try {
-    st = options.lstatSync(p)
-  } catch (er) {
-    if (er.code === 'ENOENT') {
-      return
-    }
-
-    // Windows can EPERM on stat.  Life is suffering.
-    if (er.code === 'EPERM' && isWindows) {
-      fixWinEPERMSync(p, options, er)
-    }
-  }
-
-  try {
-    // sunos lets the root user unlink directories, which is... weird.
-    if (st && st.isDirectory()) {
-      rmdirSync(p, options, null)
-    } else {
-      options.unlinkSync(p)
-    }
-  } catch (er) {
-    if (er.code === 'ENOENT') {
-      return
-    } else if (er.code === 'EPERM') {
-      return isWindows ? fixWinEPERMSync(p, options, er) : rmdirSync(p, options, er)
-    } else if (er.code !== 'EISDIR') {
-      throw er
-    }
-    rmdirSync(p, options, er)
-  }
-}
-
-function rmdirSync (p, options, originalEr) {
-  assert(p)
-  assert(options)
-
-  try {
-    options.rmdirSync(p)
-  } catch (er) {
-    if (er.code === 'ENOTDIR') {
-      throw originalEr
-    } else if (er.code === 'ENOTEMPTY' || er.code === 'EEXIST' || er.code === 'EPERM') {
-      rmkidsSync(p, options)
-    } else if (er.code !== 'ENOENT') {
-      throw er
-    }
-  }
-}
-
-function rmkidsSync (p, options) {
-  assert(p)
-  assert(options)
-  options.readdirSync(p).forEach(f => rimrafSync(path.join(p, f), options))
-
-  if (isWindows) {
-    // We only end up here once we got ENOTEMPTY at least once, and
-    // at this point, we are guaranteed to have removed all the kids.
-    // So, we know that it won't be ENOENT or ENOTDIR or anything else.
-    // try really hard to delete stuff on windows, because it has a
-    // PROFOUNDLY annoying habit of not closing handles promptly when
-    // files are deleted, resulting in spurious ENOTEMPTY errors.
-    const startTime = Date.now()
-    do {
-      try {
-        const ret = options.rmdirSync(p, options)
-        return ret
-      } catch {}
-    } while (Date.now() - startTime < 500) // give up after 500ms
-  } else {
-    const ret = options.rmdirSync(p, options)
-    return ret
-  }
-}
-
-module.exports = rimraf
-rimraf.sync = rimrafSync
 
 
 /***/ }),
@@ -6854,1433 +9731,6 @@ function utimesMillisSync (path, atime, mtime) {
 module.exports = {
   utimesMillis,
   utimesMillisSync
-}
-
-
-/***/ }),
-
-/***/ 6863:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-module.exports = realpath
-realpath.realpath = realpath
-realpath.sync = realpathSync
-realpath.realpathSync = realpathSync
-realpath.monkeypatch = monkeypatch
-realpath.unmonkeypatch = unmonkeypatch
-
-var fs = __nccwpck_require__(7147)
-var origRealpath = fs.realpath
-var origRealpathSync = fs.realpathSync
-
-var version = process.version
-var ok = /^v[0-5]\./.test(version)
-var old = __nccwpck_require__(1734)
-
-function newError (er) {
-  return er && er.syscall === 'realpath' && (
-    er.code === 'ELOOP' ||
-    er.code === 'ENOMEM' ||
-    er.code === 'ENAMETOOLONG'
-  )
-}
-
-function realpath (p, cache, cb) {
-  if (ok) {
-    return origRealpath(p, cache, cb)
-  }
-
-  if (typeof cache === 'function') {
-    cb = cache
-    cache = null
-  }
-  origRealpath(p, cache, function (er, result) {
-    if (newError(er)) {
-      old.realpath(p, cache, cb)
-    } else {
-      cb(er, result)
-    }
-  })
-}
-
-function realpathSync (p, cache) {
-  if (ok) {
-    return origRealpathSync(p, cache)
-  }
-
-  try {
-    return origRealpathSync(p, cache)
-  } catch (er) {
-    if (newError(er)) {
-      return old.realpathSync(p, cache)
-    } else {
-      throw er
-    }
-  }
-}
-
-function monkeypatch () {
-  fs.realpath = realpath
-  fs.realpathSync = realpathSync
-}
-
-function unmonkeypatch () {
-  fs.realpath = origRealpath
-  fs.realpathSync = origRealpathSync
-}
-
-
-/***/ }),
-
-/***/ 1734:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-// Copyright Joyent, Inc. and other Node contributors.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a
-// copy of this software and associated documentation files (the
-// "Software"), to deal in the Software without restriction, including
-// without limitation the rights to use, copy, modify, merge, publish,
-// distribute, sublicense, and/or sell copies of the Software, and to permit
-// persons to whom the Software is furnished to do so, subject to the
-// following conditions:
-//
-// The above copyright notice and this permission notice shall be included
-// in all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
-// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
-// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-// USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-var pathModule = __nccwpck_require__(1017);
-var isWindows = process.platform === 'win32';
-var fs = __nccwpck_require__(7147);
-
-// JavaScript implementation of realpath, ported from node pre-v6
-
-var DEBUG = process.env.NODE_DEBUG && /fs/.test(process.env.NODE_DEBUG);
-
-function rethrow() {
-  // Only enable in debug mode. A backtrace uses ~1000 bytes of heap space and
-  // is fairly slow to generate.
-  var callback;
-  if (DEBUG) {
-    var backtrace = new Error;
-    callback = debugCallback;
-  } else
-    callback = missingCallback;
-
-  return callback;
-
-  function debugCallback(err) {
-    if (err) {
-      backtrace.message = err.message;
-      err = backtrace;
-      missingCallback(err);
-    }
-  }
-
-  function missingCallback(err) {
-    if (err) {
-      if (process.throwDeprecation)
-        throw err;  // Forgot a callback but don't know where? Use NODE_DEBUG=fs
-      else if (!process.noDeprecation) {
-        var msg = 'fs: missing callback ' + (err.stack || err.message);
-        if (process.traceDeprecation)
-          console.trace(msg);
-        else
-          console.error(msg);
-      }
-    }
-  }
-}
-
-function maybeCallback(cb) {
-  return typeof cb === 'function' ? cb : rethrow();
-}
-
-var normalize = pathModule.normalize;
-
-// Regexp that finds the next partion of a (partial) path
-// result is [base_with_slash, base], e.g. ['somedir/', 'somedir']
-if (isWindows) {
-  var nextPartRe = /(.*?)(?:[\/\\]+|$)/g;
-} else {
-  var nextPartRe = /(.*?)(?:[\/]+|$)/g;
-}
-
-// Regex to find the device root, including trailing slash. E.g. 'c:\\'.
-if (isWindows) {
-  var splitRootRe = /^(?:[a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/][^\\\/]+)?[\\\/]*/;
-} else {
-  var splitRootRe = /^[\/]*/;
-}
-
-exports.realpathSync = function realpathSync(p, cache) {
-  // make p is absolute
-  p = pathModule.resolve(p);
-
-  if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
-    return cache[p];
-  }
-
-  var original = p,
-      seenLinks = {},
-      knownHard = {};
-
-  // current character position in p
-  var pos;
-  // the partial path so far, including a trailing slash if any
-  var current;
-  // the partial path without a trailing slash (except when pointing at a root)
-  var base;
-  // the partial path scanned in the previous round, with slash
-  var previous;
-
-  start();
-
-  function start() {
-    // Skip over roots
-    var m = splitRootRe.exec(p);
-    pos = m[0].length;
-    current = m[0];
-    base = m[0];
-    previous = '';
-
-    // On windows, check that the root exists. On unix there is no need.
-    if (isWindows && !knownHard[base]) {
-      fs.lstatSync(base);
-      knownHard[base] = true;
-    }
-  }
-
-  // walk down the path, swapping out linked pathparts for their real
-  // values
-  // NB: p.length changes.
-  while (pos < p.length) {
-    // find the next part
-    nextPartRe.lastIndex = pos;
-    var result = nextPartRe.exec(p);
-    previous = current;
-    current += result[0];
-    base = previous + result[1];
-    pos = nextPartRe.lastIndex;
-
-    // continue if not a symlink
-    if (knownHard[base] || (cache && cache[base] === base)) {
-      continue;
-    }
-
-    var resolvedLink;
-    if (cache && Object.prototype.hasOwnProperty.call(cache, base)) {
-      // some known symbolic link.  no need to stat again.
-      resolvedLink = cache[base];
-    } else {
-      var stat = fs.lstatSync(base);
-      if (!stat.isSymbolicLink()) {
-        knownHard[base] = true;
-        if (cache) cache[base] = base;
-        continue;
-      }
-
-      // read the link if it wasn't read before
-      // dev/ino always return 0 on windows, so skip the check.
-      var linkTarget = null;
-      if (!isWindows) {
-        var id = stat.dev.toString(32) + ':' + stat.ino.toString(32);
-        if (seenLinks.hasOwnProperty(id)) {
-          linkTarget = seenLinks[id];
-        }
-      }
-      if (linkTarget === null) {
-        fs.statSync(base);
-        linkTarget = fs.readlinkSync(base);
-      }
-      resolvedLink = pathModule.resolve(previous, linkTarget);
-      // track this, if given a cache.
-      if (cache) cache[base] = resolvedLink;
-      if (!isWindows) seenLinks[id] = linkTarget;
-    }
-
-    // resolve the link, then start over
-    p = pathModule.resolve(resolvedLink, p.slice(pos));
-    start();
-  }
-
-  if (cache) cache[original] = p;
-
-  return p;
-};
-
-
-exports.realpath = function realpath(p, cache, cb) {
-  if (typeof cb !== 'function') {
-    cb = maybeCallback(cache);
-    cache = null;
-  }
-
-  // make p is absolute
-  p = pathModule.resolve(p);
-
-  if (cache && Object.prototype.hasOwnProperty.call(cache, p)) {
-    return process.nextTick(cb.bind(null, null, cache[p]));
-  }
-
-  var original = p,
-      seenLinks = {},
-      knownHard = {};
-
-  // current character position in p
-  var pos;
-  // the partial path so far, including a trailing slash if any
-  var current;
-  // the partial path without a trailing slash (except when pointing at a root)
-  var base;
-  // the partial path scanned in the previous round, with slash
-  var previous;
-
-  start();
-
-  function start() {
-    // Skip over roots
-    var m = splitRootRe.exec(p);
-    pos = m[0].length;
-    current = m[0];
-    base = m[0];
-    previous = '';
-
-    // On windows, check that the root exists. On unix there is no need.
-    if (isWindows && !knownHard[base]) {
-      fs.lstat(base, function(err) {
-        if (err) return cb(err);
-        knownHard[base] = true;
-        LOOP();
-      });
-    } else {
-      process.nextTick(LOOP);
-    }
-  }
-
-  // walk down the path, swapping out linked pathparts for their real
-  // values
-  function LOOP() {
-    // stop if scanned past end of path
-    if (pos >= p.length) {
-      if (cache) cache[original] = p;
-      return cb(null, p);
-    }
-
-    // find the next part
-    nextPartRe.lastIndex = pos;
-    var result = nextPartRe.exec(p);
-    previous = current;
-    current += result[0];
-    base = previous + result[1];
-    pos = nextPartRe.lastIndex;
-
-    // continue if not a symlink
-    if (knownHard[base] || (cache && cache[base] === base)) {
-      return process.nextTick(LOOP);
-    }
-
-    if (cache && Object.prototype.hasOwnProperty.call(cache, base)) {
-      // known symbolic link.  no need to stat again.
-      return gotResolvedLink(cache[base]);
-    }
-
-    return fs.lstat(base, gotStat);
-  }
-
-  function gotStat(err, stat) {
-    if (err) return cb(err);
-
-    // if not a symlink, skip to the next path part
-    if (!stat.isSymbolicLink()) {
-      knownHard[base] = true;
-      if (cache) cache[base] = base;
-      return process.nextTick(LOOP);
-    }
-
-    // stat & read the link if not read before
-    // call gotTarget as soon as the link target is known
-    // dev/ino always return 0 on windows, so skip the check.
-    if (!isWindows) {
-      var id = stat.dev.toString(32) + ':' + stat.ino.toString(32);
-      if (seenLinks.hasOwnProperty(id)) {
-        return gotTarget(null, seenLinks[id], base);
-      }
-    }
-    fs.stat(base, function(err) {
-      if (err) return cb(err);
-
-      fs.readlink(base, function(err, target) {
-        if (!isWindows) seenLinks[id] = target;
-        gotTarget(err, target);
-      });
-    });
-  }
-
-  function gotTarget(err, target, base) {
-    if (err) return cb(err);
-
-    var resolvedLink = pathModule.resolve(previous, target);
-    if (cache) cache[base] = resolvedLink;
-    gotResolvedLink(resolvedLink);
-  }
-
-  function gotResolvedLink(resolvedLink) {
-    // resolve the link, then start over
-    p = pathModule.resolve(resolvedLink, p.slice(pos));
-    start();
-  }
-};
-
-
-/***/ }),
-
-/***/ 7625:
-/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
-
-exports.setopts = setopts
-exports.ownProp = ownProp
-exports.makeAbs = makeAbs
-exports.finish = finish
-exports.mark = mark
-exports.isIgnored = isIgnored
-exports.childrenIgnored = childrenIgnored
-
-function ownProp (obj, field) {
-  return Object.prototype.hasOwnProperty.call(obj, field)
-}
-
-var fs = __nccwpck_require__(7147)
-var path = __nccwpck_require__(1017)
-var minimatch = __nccwpck_require__(6453)
-var isAbsolute = (__nccwpck_require__(1017).isAbsolute)
-var Minimatch = minimatch.Minimatch
-
-function alphasort (a, b) {
-  return a.localeCompare(b, 'en')
-}
-
-function setupIgnores (self, options) {
-  self.ignore = options.ignore || []
-
-  if (!Array.isArray(self.ignore))
-    self.ignore = [self.ignore]
-
-  if (self.ignore.length) {
-    self.ignore = self.ignore.map(ignoreMap)
-  }
-}
-
-// ignore patterns are always in dot:true mode.
-function ignoreMap (pattern) {
-  var gmatcher = null
-  if (pattern.slice(-3) === '/**') {
-    var gpattern = pattern.replace(/(\/\*\*)+$/, '')
-    gmatcher = new Minimatch(gpattern, { dot: true })
-  }
-
-  return {
-    matcher: new Minimatch(pattern, { dot: true }),
-    gmatcher: gmatcher
-  }
-}
-
-function setopts (self, pattern, options) {
-  if (!options)
-    options = {}
-
-  // base-matching: just use globstar for that.
-  if (options.matchBase && -1 === pattern.indexOf("/")) {
-    if (options.noglobstar) {
-      throw new Error("base matching requires globstar")
-    }
-    pattern = "**/" + pattern
-  }
-
-  self.silent = !!options.silent
-  self.pattern = pattern
-  self.strict = options.strict !== false
-  self.realpath = !!options.realpath
-  self.realpathCache = options.realpathCache || Object.create(null)
-  self.follow = !!options.follow
-  self.dot = !!options.dot
-  self.mark = !!options.mark
-  self.nodir = !!options.nodir
-  if (self.nodir)
-    self.mark = true
-  self.sync = !!options.sync
-  self.nounique = !!options.nounique
-  self.nonull = !!options.nonull
-  self.nosort = !!options.nosort
-  self.nocase = !!options.nocase
-  self.stat = !!options.stat
-  self.noprocess = !!options.noprocess
-  self.absolute = !!options.absolute
-  self.fs = options.fs || fs
-
-  self.maxLength = options.maxLength || Infinity
-  self.cache = options.cache || Object.create(null)
-  self.statCache = options.statCache || Object.create(null)
-  self.symlinks = options.symlinks || Object.create(null)
-
-  setupIgnores(self, options)
-
-  self.changedCwd = false
-  var cwd = process.cwd()
-  if (!ownProp(options, "cwd"))
-    self.cwd = path.resolve(cwd)
-  else {
-    self.cwd = path.resolve(options.cwd)
-    self.changedCwd = self.cwd !== cwd
-  }
-
-  self.root = options.root || path.resolve(self.cwd, "/")
-  self.root = path.resolve(self.root)
-
-  // TODO: is an absolute `cwd` supposed to be resolved against `root`?
-  // e.g. { cwd: '/test', root: __dirname } === path.join(__dirname, '/test')
-  self.cwdAbs = isAbsolute(self.cwd) ? self.cwd : makeAbs(self, self.cwd)
-  self.nomount = !!options.nomount
-
-  if (process.platform === "win32") {
-    self.root = self.root.replace(/\\/g, "/")
-    self.cwd = self.cwd.replace(/\\/g, "/")
-    self.cwdAbs = self.cwdAbs.replace(/\\/g, "/")
-  }
-
-  // disable comments and negation in Minimatch.
-  // Note that they are not supported in Glob itself anyway.
-  options.nonegate = true
-  options.nocomment = true
-  // always treat \ in patterns as escapes, not path separators
-  options.allowWindowsEscape = true
-
-  self.minimatch = new Minimatch(pattern, options)
-  self.options = self.minimatch.options
-}
-
-function finish (self) {
-  var nou = self.nounique
-  var all = nou ? [] : Object.create(null)
-
-  for (var i = 0, l = self.matches.length; i < l; i ++) {
-    var matches = self.matches[i]
-    if (!matches || Object.keys(matches).length === 0) {
-      if (self.nonull) {
-        // do like the shell, and spit out the literal glob
-        var literal = self.minimatch.globSet[i]
-        if (nou)
-          all.push(literal)
-        else
-          all[literal] = true
-      }
-    } else {
-      // had matches
-      var m = Object.keys(matches)
-      if (nou)
-        all.push.apply(all, m)
-      else
-        m.forEach(function (m) {
-          all[m] = true
-        })
-    }
-  }
-
-  if (!nou)
-    all = Object.keys(all)
-
-  if (!self.nosort)
-    all = all.sort(alphasort)
-
-  // at *some* point we statted all of these
-  if (self.mark) {
-    for (var i = 0; i < all.length; i++) {
-      all[i] = self._mark(all[i])
-    }
-    if (self.nodir) {
-      all = all.filter(function (e) {
-        var notDir = !(/\/$/.test(e))
-        var c = self.cache[e] || self.cache[makeAbs(self, e)]
-        if (notDir && c)
-          notDir = c !== 'DIR' && !Array.isArray(c)
-        return notDir
-      })
-    }
-  }
-
-  if (self.ignore.length)
-    all = all.filter(function(m) {
-      return !isIgnored(self, m)
-    })
-
-  self.found = all
-}
-
-function mark (self, p) {
-  var abs = makeAbs(self, p)
-  var c = self.cache[abs]
-  var m = p
-  if (c) {
-    var isDir = c === 'DIR' || Array.isArray(c)
-    var slash = p.slice(-1) === '/'
-
-    if (isDir && !slash)
-      m += '/'
-    else if (!isDir && slash)
-      m = m.slice(0, -1)
-
-    if (m !== p) {
-      var mabs = makeAbs(self, m)
-      self.statCache[mabs] = self.statCache[abs]
-      self.cache[mabs] = self.cache[abs]
-    }
-  }
-
-  return m
-}
-
-// lotta situps...
-function makeAbs (self, f) {
-  var abs = f
-  if (f.charAt(0) === '/') {
-    abs = path.join(self.root, f)
-  } else if (isAbsolute(f) || f === '') {
-    abs = f
-  } else if (self.changedCwd) {
-    abs = path.resolve(self.cwd, f)
-  } else {
-    abs = path.resolve(f)
-  }
-
-  if (process.platform === 'win32')
-    abs = abs.replace(/\\/g, '/')
-
-  return abs
-}
-
-
-// Return true, if pattern ends with globstar '**', for the accompanying parent directory.
-// Ex:- If node_modules/** is the pattern, add 'node_modules' to ignore list along with it's contents
-function isIgnored (self, path) {
-  if (!self.ignore.length)
-    return false
-
-  return self.ignore.some(function(item) {
-    return item.matcher.match(path) || !!(item.gmatcher && item.gmatcher.match(path))
-  })
-}
-
-function childrenIgnored (self, path) {
-  if (!self.ignore.length)
-    return false
-
-  return self.ignore.some(function(item) {
-    return !!(item.gmatcher && item.gmatcher.match(path))
-  })
-}
-
-
-/***/ }),
-
-/***/ 1957:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-// Approach:
-//
-// 1. Get the minimatch set
-// 2. For each pattern in the set, PROCESS(pattern, false)
-// 3. Store matches per-set, then uniq them
-//
-// PROCESS(pattern, inGlobStar)
-// Get the first [n] items from pattern that are all strings
-// Join these together.  This is PREFIX.
-//   If there is no more remaining, then stat(PREFIX) and
-//   add to matches if it succeeds.  END.
-//
-// If inGlobStar and PREFIX is symlink and points to dir
-//   set ENTRIES = []
-// else readdir(PREFIX) as ENTRIES
-//   If fail, END
-//
-// with ENTRIES
-//   If pattern[n] is GLOBSTAR
-//     // handle the case where the globstar match is empty
-//     // by pruning it out, and testing the resulting pattern
-//     PROCESS(pattern[0..n] + pattern[n+1 .. $], false)
-//     // handle other cases.
-//     for ENTRY in ENTRIES (not dotfiles)
-//       // attach globstar + tail onto the entry
-//       // Mark that this entry is a globstar match
-//       PROCESS(pattern[0..n] + ENTRY + pattern[n .. $], true)
-//
-//   else // not globstar
-//     for ENTRY in ENTRIES (not dotfiles, unless pattern[n] is dot)
-//       Test ENTRY against pattern[n]
-//       If fails, continue
-//       If passes, PROCESS(pattern[0..n] + item + pattern[n+1 .. $])
-//
-// Caveat:
-//   Cache all stats and readdirs results to minimize syscall.  Since all
-//   we ever care about is existence and directory-ness, we can just keep
-//   `true` for files, and [children,...] for directories, or `false` for
-//   things that don't exist.
-
-module.exports = glob
-
-var rp = __nccwpck_require__(6863)
-var minimatch = __nccwpck_require__(6453)
-var Minimatch = minimatch.Minimatch
-var inherits = __nccwpck_require__(4124)
-var EE = (__nccwpck_require__(2361).EventEmitter)
-var path = __nccwpck_require__(1017)
-var assert = __nccwpck_require__(9491)
-var isAbsolute = (__nccwpck_require__(1017).isAbsolute)
-var globSync = __nccwpck_require__(9010)
-var common = __nccwpck_require__(7625)
-var setopts = common.setopts
-var ownProp = common.ownProp
-var inflight = __nccwpck_require__(2492)
-var util = __nccwpck_require__(3837)
-var childrenIgnored = common.childrenIgnored
-var isIgnored = common.isIgnored
-
-var once = __nccwpck_require__(1223)
-
-function glob (pattern, options, cb) {
-  if (typeof options === 'function') cb = options, options = {}
-  if (!options) options = {}
-
-  if (options.sync) {
-    if (cb)
-      throw new TypeError('callback provided to sync glob')
-    return globSync(pattern, options)
-  }
-
-  return new Glob(pattern, options, cb)
-}
-
-glob.sync = globSync
-var GlobSync = glob.GlobSync = globSync.GlobSync
-
-// old api surface
-glob.glob = glob
-
-function extend (origin, add) {
-  if (add === null || typeof add !== 'object') {
-    return origin
-  }
-
-  var keys = Object.keys(add)
-  var i = keys.length
-  while (i--) {
-    origin[keys[i]] = add[keys[i]]
-  }
-  return origin
-}
-
-glob.hasMagic = function (pattern, options_) {
-  var options = extend({}, options_)
-  options.noprocess = true
-
-  var g = new Glob(pattern, options)
-  var set = g.minimatch.set
-
-  if (!pattern)
-    return false
-
-  if (set.length > 1)
-    return true
-
-  for (var j = 0; j < set[0].length; j++) {
-    if (typeof set[0][j] !== 'string')
-      return true
-  }
-
-  return false
-}
-
-glob.Glob = Glob
-inherits(Glob, EE)
-function Glob (pattern, options, cb) {
-  if (typeof options === 'function') {
-    cb = options
-    options = null
-  }
-
-  if (options && options.sync) {
-    if (cb)
-      throw new TypeError('callback provided to sync glob')
-    return new GlobSync(pattern, options)
-  }
-
-  if (!(this instanceof Glob))
-    return new Glob(pattern, options, cb)
-
-  setopts(this, pattern, options)
-  this._didRealPath = false
-
-  // process each pattern in the minimatch set
-  var n = this.minimatch.set.length
-
-  // The matches are stored as {<filename>: true,...} so that
-  // duplicates are automagically pruned.
-  // Later, we do an Object.keys() on these.
-  // Keep them as a list so we can fill in when nonull is set.
-  this.matches = new Array(n)
-
-  if (typeof cb === 'function') {
-    cb = once(cb)
-    this.on('error', cb)
-    this.on('end', function (matches) {
-      cb(null, matches)
-    })
-  }
-
-  var self = this
-  this._processing = 0
-
-  this._emitQueue = []
-  this._processQueue = []
-  this.paused = false
-
-  if (this.noprocess)
-    return this
-
-  if (n === 0)
-    return done()
-
-  var sync = true
-  for (var i = 0; i < n; i ++) {
-    this._process(this.minimatch.set[i], i, false, done)
-  }
-  sync = false
-
-  function done () {
-    --self._processing
-    if (self._processing <= 0) {
-      if (sync) {
-        process.nextTick(function () {
-          self._finish()
-        })
-      } else {
-        self._finish()
-      }
-    }
-  }
-}
-
-Glob.prototype._finish = function () {
-  assert(this instanceof Glob)
-  if (this.aborted)
-    return
-
-  if (this.realpath && !this._didRealpath)
-    return this._realpath()
-
-  common.finish(this)
-  this.emit('end', this.found)
-}
-
-Glob.prototype._realpath = function () {
-  if (this._didRealpath)
-    return
-
-  this._didRealpath = true
-
-  var n = this.matches.length
-  if (n === 0)
-    return this._finish()
-
-  var self = this
-  for (var i = 0; i < this.matches.length; i++)
-    this._realpathSet(i, next)
-
-  function next () {
-    if (--n === 0)
-      self._finish()
-  }
-}
-
-Glob.prototype._realpathSet = function (index, cb) {
-  var matchset = this.matches[index]
-  if (!matchset)
-    return cb()
-
-  var found = Object.keys(matchset)
-  var self = this
-  var n = found.length
-
-  if (n === 0)
-    return cb()
-
-  var set = this.matches[index] = Object.create(null)
-  found.forEach(function (p, i) {
-    // If there's a problem with the stat, then it means that
-    // one or more of the links in the realpath couldn't be
-    // resolved.  just return the abs value in that case.
-    p = self._makeAbs(p)
-    rp.realpath(p, self.realpathCache, function (er, real) {
-      if (!er)
-        set[real] = true
-      else if (er.syscall === 'stat')
-        set[p] = true
-      else
-        self.emit('error', er) // srsly wtf right here
-
-      if (--n === 0) {
-        self.matches[index] = set
-        cb()
-      }
-    })
-  })
-}
-
-Glob.prototype._mark = function (p) {
-  return common.mark(this, p)
-}
-
-Glob.prototype._makeAbs = function (f) {
-  return common.makeAbs(this, f)
-}
-
-Glob.prototype.abort = function () {
-  this.aborted = true
-  this.emit('abort')
-}
-
-Glob.prototype.pause = function () {
-  if (!this.paused) {
-    this.paused = true
-    this.emit('pause')
-  }
-}
-
-Glob.prototype.resume = function () {
-  if (this.paused) {
-    this.emit('resume')
-    this.paused = false
-    if (this._emitQueue.length) {
-      var eq = this._emitQueue.slice(0)
-      this._emitQueue.length = 0
-      for (var i = 0; i < eq.length; i ++) {
-        var e = eq[i]
-        this._emitMatch(e[0], e[1])
-      }
-    }
-    if (this._processQueue.length) {
-      var pq = this._processQueue.slice(0)
-      this._processQueue.length = 0
-      for (var i = 0; i < pq.length; i ++) {
-        var p = pq[i]
-        this._processing--
-        this._process(p[0], p[1], p[2], p[3])
-      }
-    }
-  }
-}
-
-Glob.prototype._process = function (pattern, index, inGlobStar, cb) {
-  assert(this instanceof Glob)
-  assert(typeof cb === 'function')
-
-  if (this.aborted)
-    return
-
-  this._processing++
-  if (this.paused) {
-    this._processQueue.push([pattern, index, inGlobStar, cb])
-    return
-  }
-
-  //console.error('PROCESS %d', this._processing, pattern)
-
-  // Get the first [n] parts of pattern that are all strings.
-  var n = 0
-  while (typeof pattern[n] === 'string') {
-    n ++
-  }
-  // now n is the index of the first one that is *not* a string.
-
-  // see if there's anything else
-  var prefix
-  switch (n) {
-    // if not, then this is rather simple
-    case pattern.length:
-      this._processSimple(pattern.join('/'), index, cb)
-      return
-
-    case 0:
-      // pattern *starts* with some non-trivial item.
-      // going to readdir(cwd), but not include the prefix in matches.
-      prefix = null
-      break
-
-    default:
-      // pattern has some string bits in the front.
-      // whatever it starts with, whether that's 'absolute' like /foo/bar,
-      // or 'relative' like '../baz'
-      prefix = pattern.slice(0, n).join('/')
-      break
-  }
-
-  var remain = pattern.slice(n)
-
-  // get the list of entries.
-  var read
-  if (prefix === null)
-    read = '.'
-  else if (isAbsolute(prefix) ||
-      isAbsolute(pattern.map(function (p) {
-        return typeof p === 'string' ? p : '[*]'
-      }).join('/'))) {
-    if (!prefix || !isAbsolute(prefix))
-      prefix = '/' + prefix
-    read = prefix
-  } else
-    read = prefix
-
-  var abs = this._makeAbs(read)
-
-  //if ignored, skip _processing
-  if (childrenIgnored(this, read))
-    return cb()
-
-  var isGlobStar = remain[0] === minimatch.GLOBSTAR
-  if (isGlobStar)
-    this._processGlobStar(prefix, read, abs, remain, index, inGlobStar, cb)
-  else
-    this._processReaddir(prefix, read, abs, remain, index, inGlobStar, cb)
-}
-
-Glob.prototype._processReaddir = function (prefix, read, abs, remain, index, inGlobStar, cb) {
-  var self = this
-  this._readdir(abs, inGlobStar, function (er, entries) {
-    return self._processReaddir2(prefix, read, abs, remain, index, inGlobStar, entries, cb)
-  })
-}
-
-Glob.prototype._processReaddir2 = function (prefix, read, abs, remain, index, inGlobStar, entries, cb) {
-
-  // if the abs isn't a dir, then nothing can match!
-  if (!entries)
-    return cb()
-
-  // It will only match dot entries if it starts with a dot, or if
-  // dot is set.  Stuff like @(.foo|.bar) isn't allowed.
-  var pn = remain[0]
-  var negate = !!this.minimatch.negate
-  var rawGlob = pn._glob
-  var dotOk = this.dot || rawGlob.charAt(0) === '.'
-
-  var matchedEntries = []
-  for (var i = 0; i < entries.length; i++) {
-    var e = entries[i]
-    if (e.charAt(0) !== '.' || dotOk) {
-      var m
-      if (negate && !prefix) {
-        m = !e.match(pn)
-      } else {
-        m = e.match(pn)
-      }
-      if (m)
-        matchedEntries.push(e)
-    }
-  }
-
-  //console.error('prd2', prefix, entries, remain[0]._glob, matchedEntries)
-
-  var len = matchedEntries.length
-  // If there are no matched entries, then nothing matches.
-  if (len === 0)
-    return cb()
-
-  // if this is the last remaining pattern bit, then no need for
-  // an additional stat *unless* the user has specified mark or
-  // stat explicitly.  We know they exist, since readdir returned
-  // them.
-
-  if (remain.length === 1 && !this.mark && !this.stat) {
-    if (!this.matches[index])
-      this.matches[index] = Object.create(null)
-
-    for (var i = 0; i < len; i ++) {
-      var e = matchedEntries[i]
-      if (prefix) {
-        if (prefix !== '/')
-          e = prefix + '/' + e
-        else
-          e = prefix + e
-      }
-
-      if (e.charAt(0) === '/' && !this.nomount) {
-        e = path.join(this.root, e)
-      }
-      this._emitMatch(index, e)
-    }
-    // This was the last one, and no stats were needed
-    return cb()
-  }
-
-  // now test all matched entries as stand-ins for that part
-  // of the pattern.
-  remain.shift()
-  for (var i = 0; i < len; i ++) {
-    var e = matchedEntries[i]
-    var newPattern
-    if (prefix) {
-      if (prefix !== '/')
-        e = prefix + '/' + e
-      else
-        e = prefix + e
-    }
-    this._process([e].concat(remain), index, inGlobStar, cb)
-  }
-  cb()
-}
-
-Glob.prototype._emitMatch = function (index, e) {
-  if (this.aborted)
-    return
-
-  if (isIgnored(this, e))
-    return
-
-  if (this.paused) {
-    this._emitQueue.push([index, e])
-    return
-  }
-
-  var abs = isAbsolute(e) ? e : this._makeAbs(e)
-
-  if (this.mark)
-    e = this._mark(e)
-
-  if (this.absolute)
-    e = abs
-
-  if (this.matches[index][e])
-    return
-
-  if (this.nodir) {
-    var c = this.cache[abs]
-    if (c === 'DIR' || Array.isArray(c))
-      return
-  }
-
-  this.matches[index][e] = true
-
-  var st = this.statCache[abs]
-  if (st)
-    this.emit('stat', e, st)
-
-  this.emit('match', e)
-}
-
-Glob.prototype._readdirInGlobStar = function (abs, cb) {
-  if (this.aborted)
-    return
-
-  // follow all symlinked directories forever
-  // just proceed as if this is a non-globstar situation
-  if (this.follow)
-    return this._readdir(abs, false, cb)
-
-  var lstatkey = 'lstat\0' + abs
-  var self = this
-  var lstatcb = inflight(lstatkey, lstatcb_)
-
-  if (lstatcb)
-    self.fs.lstat(abs, lstatcb)
-
-  function lstatcb_ (er, lstat) {
-    if (er && er.code === 'ENOENT')
-      return cb()
-
-    var isSym = lstat && lstat.isSymbolicLink()
-    self.symlinks[abs] = isSym
-
-    // If it's not a symlink or a dir, then it's definitely a regular file.
-    // don't bother doing a readdir in that case.
-    if (!isSym && lstat && !lstat.isDirectory()) {
-      self.cache[abs] = 'FILE'
-      cb()
-    } else
-      self._readdir(abs, false, cb)
-  }
-}
-
-Glob.prototype._readdir = function (abs, inGlobStar, cb) {
-  if (this.aborted)
-    return
-
-  cb = inflight('readdir\0'+abs+'\0'+inGlobStar, cb)
-  if (!cb)
-    return
-
-  //console.error('RD %j %j', +inGlobStar, abs)
-  if (inGlobStar && !ownProp(this.symlinks, abs))
-    return this._readdirInGlobStar(abs, cb)
-
-  if (ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-    if (!c || c === 'FILE')
-      return cb()
-
-    if (Array.isArray(c))
-      return cb(null, c)
-  }
-
-  var self = this
-  self.fs.readdir(abs, readdirCb(this, abs, cb))
-}
-
-function readdirCb (self, abs, cb) {
-  return function (er, entries) {
-    if (er)
-      self._readdirError(abs, er, cb)
-    else
-      self._readdirEntries(abs, entries, cb)
-  }
-}
-
-Glob.prototype._readdirEntries = function (abs, entries, cb) {
-  if (this.aborted)
-    return
-
-  // if we haven't asked to stat everything, then just
-  // assume that everything in there exists, so we can avoid
-  // having to stat it a second time.
-  if (!this.mark && !this.stat) {
-    for (var i = 0; i < entries.length; i ++) {
-      var e = entries[i]
-      if (abs === '/')
-        e = abs + e
-      else
-        e = abs + '/' + e
-      this.cache[e] = true
-    }
-  }
-
-  this.cache[abs] = entries
-  return cb(null, entries)
-}
-
-Glob.prototype._readdirError = function (f, er, cb) {
-  if (this.aborted)
-    return
-
-  // handle errors, and cache the information
-  switch (er.code) {
-    case 'ENOTSUP': // https://github.com/isaacs/node-glob/issues/205
-    case 'ENOTDIR': // totally normal. means it *does* exist.
-      var abs = this._makeAbs(f)
-      this.cache[abs] = 'FILE'
-      if (abs === this.cwdAbs) {
-        var error = new Error(er.code + ' invalid cwd ' + this.cwd)
-        error.path = this.cwd
-        error.code = er.code
-        this.emit('error', error)
-        this.abort()
-      }
-      break
-
-    case 'ENOENT': // not terribly unusual
-    case 'ELOOP':
-    case 'ENAMETOOLONG':
-    case 'UNKNOWN':
-      this.cache[this._makeAbs(f)] = false
-      break
-
-    default: // some unusual error.  Treat as failure.
-      this.cache[this._makeAbs(f)] = false
-      if (this.strict) {
-        this.emit('error', er)
-        // If the error is handled, then we abort
-        // if not, we threw out of here
-        this.abort()
-      }
-      if (!this.silent)
-        console.error('glob error', er)
-      break
-  }
-
-  return cb()
-}
-
-Glob.prototype._processGlobStar = function (prefix, read, abs, remain, index, inGlobStar, cb) {
-  var self = this
-  this._readdir(abs, inGlobStar, function (er, entries) {
-    self._processGlobStar2(prefix, read, abs, remain, index, inGlobStar, entries, cb)
-  })
-}
-
-
-Glob.prototype._processGlobStar2 = function (prefix, read, abs, remain, index, inGlobStar, entries, cb) {
-  //console.error('pgs2', prefix, remain[0], entries)
-
-  // no entries means not a dir, so it can never have matches
-  // foo.txt/** doesn't match foo.txt
-  if (!entries)
-    return cb()
-
-  // test without the globstar, and with every child both below
-  // and replacing the globstar.
-  var remainWithoutGlobStar = remain.slice(1)
-  var gspref = prefix ? [ prefix ] : []
-  var noGlobStar = gspref.concat(remainWithoutGlobStar)
-
-  // the noGlobStar pattern exits the inGlobStar state
-  this._process(noGlobStar, index, false, cb)
-
-  var isSym = this.symlinks[abs]
-  var len = entries.length
-
-  // If it's a symlink, and we're in a globstar, then stop
-  if (isSym && inGlobStar)
-    return cb()
-
-  for (var i = 0; i < len; i++) {
-    var e = entries[i]
-    if (e.charAt(0) === '.' && !this.dot)
-      continue
-
-    // these two cases enter the inGlobStar state
-    var instead = gspref.concat(entries[i], remainWithoutGlobStar)
-    this._process(instead, index, true, cb)
-
-    var below = gspref.concat(entries[i], remain)
-    this._process(below, index, true, cb)
-  }
-
-  cb()
-}
-
-Glob.prototype._processSimple = function (prefix, index, cb) {
-  // XXX review this.  Shouldn't it be doing the mounting etc
-  // before doing stat?  kinda weird?
-  var self = this
-  this._stat(prefix, function (er, exists) {
-    self._processSimple2(prefix, index, er, exists, cb)
-  })
-}
-Glob.prototype._processSimple2 = function (prefix, index, er, exists, cb) {
-
-  //console.error('ps2', prefix, exists)
-
-  if (!this.matches[index])
-    this.matches[index] = Object.create(null)
-
-  // If it doesn't exist, then just mark the lack of results
-  if (!exists)
-    return cb()
-
-  if (prefix && isAbsolute(prefix) && !this.nomount) {
-    var trail = /[\/\\]$/.test(prefix)
-    if (prefix.charAt(0) === '/') {
-      prefix = path.join(this.root, prefix)
-    } else {
-      prefix = path.resolve(this.root, prefix)
-      if (trail)
-        prefix += '/'
-    }
-  }
-
-  if (process.platform === 'win32')
-    prefix = prefix.replace(/\\/g, '/')
-
-  // Mark this as a match
-  this._emitMatch(index, prefix)
-  cb()
-}
-
-// Returns either 'DIR', 'FILE', or false
-Glob.prototype._stat = function (f, cb) {
-  var abs = this._makeAbs(f)
-  var needDir = f.slice(-1) === '/'
-
-  if (f.length > this.maxLength)
-    return cb()
-
-  if (!this.stat && ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-
-    if (Array.isArray(c))
-      c = 'DIR'
-
-    // It exists, but maybe not how we need it
-    if (!needDir || c === 'DIR')
-      return cb(null, c)
-
-    if (needDir && c === 'FILE')
-      return cb()
-
-    // otherwise we have to stat, because maybe c=true
-    // if we know it exists, but not what it is.
-  }
-
-  var exists
-  var stat = this.statCache[abs]
-  if (stat !== undefined) {
-    if (stat === false)
-      return cb(null, stat)
-    else {
-      var type = stat.isDirectory() ? 'DIR' : 'FILE'
-      if (needDir && type === 'FILE')
-        return cb()
-      else
-        return cb(null, type, stat)
-    }
-  }
-
-  var self = this
-  var statcb = inflight('stat\0' + abs, lstatcb_)
-  if (statcb)
-    self.fs.lstat(abs, statcb)
-
-  function lstatcb_ (er, lstat) {
-    if (lstat && lstat.isSymbolicLink()) {
-      // If it's a symlink, then treat it as the target, unless
-      // the target does not exist, then treat it as a file.
-      return self.fs.stat(abs, function (er, stat) {
-        if (er)
-          self._stat2(f, abs, null, lstat, cb)
-        else
-          self._stat2(f, abs, er, stat, cb)
-      })
-    } else {
-      self._stat2(f, abs, er, lstat, cb)
-    }
-  }
-}
-
-Glob.prototype._stat2 = function (f, abs, er, stat, cb) {
-  if (er && (er.code === 'ENOENT' || er.code === 'ENOTDIR')) {
-    this.statCache[abs] = false
-    return cb()
-  }
-
-  var needDir = f.slice(-1) === '/'
-  this.statCache[abs] = stat
-
-  if (abs.slice(-1) === '/' && stat && !stat.isDirectory())
-    return cb(null, false, stat)
-
-  var c = true
-  if (stat)
-    c = stat.isDirectory() ? 'DIR' : 'FILE'
-  this.cache[abs] = this.cache[abs] || c
-
-  if (needDir && c === 'FILE')
-    return cb()
-
-  return cb(null, c, stat)
 }
 
 
@@ -8492,1423 +9942,6 @@ function expand(str, isTop) {
   return expansions;
 }
 
-
-
-/***/ }),
-
-/***/ 3438:
-/***/ ((module) => {
-
-const isWindows = typeof process === 'object' &&
-  process &&
-  process.platform === 'win32'
-module.exports = isWindows ? { sep: '\\' } : { sep: '/' }
-
-
-/***/ }),
-
-/***/ 6453:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-const minimatch = module.exports = (p, pattern, options = {}) => {
-  assertValidPattern(pattern)
-
-  // shortcut: comments match nothing.
-  if (!options.nocomment && pattern.charAt(0) === '#') {
-    return false
-  }
-
-  return new Minimatch(pattern, options).match(p)
-}
-
-module.exports = minimatch
-
-const path = __nccwpck_require__(3438)
-minimatch.sep = path.sep
-
-const GLOBSTAR = Symbol('globstar **')
-minimatch.GLOBSTAR = GLOBSTAR
-const expand = __nccwpck_require__(1046)
-
-const plTypes = {
-  '!': { open: '(?:(?!(?:', close: '))[^/]*?)'},
-  '?': { open: '(?:', close: ')?' },
-  '+': { open: '(?:', close: ')+' },
-  '*': { open: '(?:', close: ')*' },
-  '@': { open: '(?:', close: ')' }
-}
-
-// any single thing other than /
-// don't need to escape / when using new RegExp()
-const qmark = '[^/]'
-
-// * => any number of characters
-const star = qmark + '*?'
-
-// ** when dots are allowed.  Anything goes, except .. and .
-// not (^ or / followed by one or two dots followed by $ or /),
-// followed by anything, any number of times.
-const twoStarDot = '(?:(?!(?:\\\/|^)(?:\\.{1,2})($|\\\/)).)*?'
-
-// not a ^ or / followed by a dot,
-// followed by anything, any number of times.
-const twoStarNoDot = '(?:(?!(?:\\\/|^)\\.).)*?'
-
-// "abc" -> { a:true, b:true, c:true }
-const charSet = s => s.split('').reduce((set, c) => {
-  set[c] = true
-  return set
-}, {})
-
-// characters that need to be escaped in RegExp.
-const reSpecials = charSet('().*{}+?[]^$\\!')
-
-// characters that indicate we have to add the pattern start
-const addPatternStartSet = charSet('[.(')
-
-// normalizes slashes.
-const slashSplit = /\/+/
-
-minimatch.filter = (pattern, options = {}) =>
-  (p, i, list) => minimatch(p, pattern, options)
-
-const ext = (a, b = {}) => {
-  const t = {}
-  Object.keys(a).forEach(k => t[k] = a[k])
-  Object.keys(b).forEach(k => t[k] = b[k])
-  return t
-}
-
-minimatch.defaults = def => {
-  if (!def || typeof def !== 'object' || !Object.keys(def).length) {
-    return minimatch
-  }
-
-  const orig = minimatch
-
-  const m = (p, pattern, options) => orig(p, pattern, ext(def, options))
-  m.Minimatch = class Minimatch extends orig.Minimatch {
-    constructor (pattern, options) {
-      super(pattern, ext(def, options))
-    }
-  }
-  m.Minimatch.defaults = options => orig.defaults(ext(def, options)).Minimatch
-  m.filter = (pattern, options) => orig.filter(pattern, ext(def, options))
-  m.defaults = options => orig.defaults(ext(def, options))
-  m.makeRe = (pattern, options) => orig.makeRe(pattern, ext(def, options))
-  m.braceExpand = (pattern, options) => orig.braceExpand(pattern, ext(def, options))
-  m.match = (list, pattern, options) => orig.match(list, pattern, ext(def, options))
-
-  return m
-}
-
-
-
-
-
-// Brace expansion:
-// a{b,c}d -> abd acd
-// a{b,}c -> abc ac
-// a{0..3}d -> a0d a1d a2d a3d
-// a{b,c{d,e}f}g -> abg acdfg acefg
-// a{b,c}d{e,f}g -> abdeg acdeg abdeg abdfg
-//
-// Invalid sets are not expanded.
-// a{2..}b -> a{2..}b
-// a{b}c -> a{b}c
-minimatch.braceExpand = (pattern, options) => braceExpand(pattern, options)
-
-const braceExpand = (pattern, options = {}) => {
-  assertValidPattern(pattern)
-
-  // Thanks to Yeting Li <https://github.com/yetingli> for
-  // improving this regexp to avoid a ReDOS vulnerability.
-  if (options.nobrace || !/\{(?:(?!\{).)*\}/.test(pattern)) {
-    // shortcut. no need to expand.
-    return [pattern]
-  }
-
-  return expand(pattern)
-}
-
-const MAX_PATTERN_LENGTH = 1024 * 64
-const assertValidPattern = pattern => {
-  if (typeof pattern !== 'string') {
-    throw new TypeError('invalid pattern')
-  }
-
-  if (pattern.length > MAX_PATTERN_LENGTH) {
-    throw new TypeError('pattern is too long')
-  }
-}
-
-// parse a component of the expanded set.
-// At this point, no pattern may contain "/" in it
-// so we're going to return a 2d array, where each entry is the full
-// pattern, split on '/', and then turned into a regular expression.
-// A regexp is made at the end which joins each array with an
-// escaped /, and another full one which joins each regexp with |.
-//
-// Following the lead of Bash 4.1, note that "**" only has special meaning
-// when it is the *only* thing in a path portion.  Otherwise, any series
-// of * is equivalent to a single *.  Globstar behavior is enabled by
-// default, and can be disabled by setting options.noglobstar.
-const SUBPARSE = Symbol('subparse')
-
-minimatch.makeRe = (pattern, options) =>
-  new Minimatch(pattern, options || {}).makeRe()
-
-minimatch.match = (list, pattern, options = {}) => {
-  const mm = new Minimatch(pattern, options)
-  list = list.filter(f => mm.match(f))
-  if (mm.options.nonull && !list.length) {
-    list.push(pattern)
-  }
-  return list
-}
-
-// replace stuff like \* with *
-const globUnescape = s => s.replace(/\\(.)/g, '$1')
-const regExpEscape = s => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&')
-
-class Minimatch {
-  constructor (pattern, options) {
-    assertValidPattern(pattern)
-
-    if (!options) options = {}
-
-    this.options = options
-    this.set = []
-    this.pattern = pattern
-    this.windowsPathsNoEscape = !!options.windowsPathsNoEscape ||
-      options.allowWindowsEscape === false
-    if (this.windowsPathsNoEscape) {
-      this.pattern = this.pattern.replace(/\\/g, '/')
-    }
-    this.regexp = null
-    this.negate = false
-    this.comment = false
-    this.empty = false
-    this.partial = !!options.partial
-
-    // make the set of regexps etc.
-    this.make()
-  }
-
-  debug () {}
-
-  make () {
-    const pattern = this.pattern
-    const options = this.options
-
-    // empty patterns and comments match nothing.
-    if (!options.nocomment && pattern.charAt(0) === '#') {
-      this.comment = true
-      return
-    }
-    if (!pattern) {
-      this.empty = true
-      return
-    }
-
-    // step 1: figure out negation, etc.
-    this.parseNegate()
-
-    // step 2: expand braces
-    let set = this.globSet = this.braceExpand()
-
-    if (options.debug) this.debug = (...args) => console.error(...args)
-
-    this.debug(this.pattern, set)
-
-    // step 3: now we have a set, so turn each one into a series of path-portion
-    // matching patterns.
-    // These will be regexps, except in the case of "**", which is
-    // set to the GLOBSTAR object for globstar behavior,
-    // and will not contain any / characters
-    set = this.globParts = set.map(s => s.split(slashSplit))
-
-    this.debug(this.pattern, set)
-
-    // glob --> regexps
-    set = set.map((s, si, set) => s.map(this.parse, this))
-
-    this.debug(this.pattern, set)
-
-    // filter out everything that didn't compile properly.
-    set = set.filter(s => s.indexOf(false) === -1)
-
-    this.debug(this.pattern, set)
-
-    this.set = set
-  }
-
-  parseNegate () {
-    if (this.options.nonegate) return
-
-    const pattern = this.pattern
-    let negate = false
-    let negateOffset = 0
-
-    for (let i = 0; i < pattern.length && pattern.charAt(i) === '!'; i++) {
-      negate = !negate
-      negateOffset++
-    }
-
-    if (negateOffset) this.pattern = pattern.substr(negateOffset)
-    this.negate = negate
-  }
-
-  // set partial to true to test if, for example,
-  // "/a/b" matches the start of "/*/b/*/d"
-  // Partial means, if you run out of file before you run
-  // out of pattern, then that's fine, as long as all
-  // the parts match.
-  matchOne (file, pattern, partial) {
-    var options = this.options
-
-    this.debug('matchOne',
-      { 'this': this, file: file, pattern: pattern })
-
-    this.debug('matchOne', file.length, pattern.length)
-
-    for (var fi = 0,
-        pi = 0,
-        fl = file.length,
-        pl = pattern.length
-        ; (fi < fl) && (pi < pl)
-        ; fi++, pi++) {
-      this.debug('matchOne loop')
-      var p = pattern[pi]
-      var f = file[fi]
-
-      this.debug(pattern, p, f)
-
-      // should be impossible.
-      // some invalid regexp stuff in the set.
-      /* istanbul ignore if */
-      if (p === false) return false
-
-      if (p === GLOBSTAR) {
-        this.debug('GLOBSTAR', [pattern, p, f])
-
-        // "**"
-        // a/**/b/**/c would match the following:
-        // a/b/x/y/z/c
-        // a/x/y/z/b/c
-        // a/b/x/b/x/c
-        // a/b/c
-        // To do this, take the rest of the pattern after
-        // the **, and see if it would match the file remainder.
-        // If so, return success.
-        // If not, the ** "swallows" a segment, and try again.
-        // This is recursively awful.
-        //
-        // a/**/b/**/c matching a/b/x/y/z/c
-        // - a matches a
-        // - doublestar
-        //   - matchOne(b/x/y/z/c, b/**/c)
-        //     - b matches b
-        //     - doublestar
-        //       - matchOne(x/y/z/c, c) -> no
-        //       - matchOne(y/z/c, c) -> no
-        //       - matchOne(z/c, c) -> no
-        //       - matchOne(c, c) yes, hit
-        var fr = fi
-        var pr = pi + 1
-        if (pr === pl) {
-          this.debug('** at the end')
-          // a ** at the end will just swallow the rest.
-          // We have found a match.
-          // however, it will not swallow /.x, unless
-          // options.dot is set.
-          // . and .. are *never* matched by **, for explosively
-          // exponential reasons.
-          for (; fi < fl; fi++) {
-            if (file[fi] === '.' || file[fi] === '..' ||
-              (!options.dot && file[fi].charAt(0) === '.')) return false
-          }
-          return true
-        }
-
-        // ok, let's see if we can swallow whatever we can.
-        while (fr < fl) {
-          var swallowee = file[fr]
-
-          this.debug('\nglobstar while', file, fr, pattern, pr, swallowee)
-
-          // XXX remove this slice.  Just pass the start index.
-          if (this.matchOne(file.slice(fr), pattern.slice(pr), partial)) {
-            this.debug('globstar found match!', fr, fl, swallowee)
-            // found a match.
-            return true
-          } else {
-            // can't swallow "." or ".." ever.
-            // can only swallow ".foo" when explicitly asked.
-            if (swallowee === '.' || swallowee === '..' ||
-              (!options.dot && swallowee.charAt(0) === '.')) {
-              this.debug('dot detected!', file, fr, pattern, pr)
-              break
-            }
-
-            // ** swallows a segment, and continue.
-            this.debug('globstar swallow a segment, and continue')
-            fr++
-          }
-        }
-
-        // no match was found.
-        // However, in partial mode, we can't say this is necessarily over.
-        // If there's more *pattern* left, then
-        /* istanbul ignore if */
-        if (partial) {
-          // ran out of file
-          this.debug('\n>>> no match, partial?', file, fr, pattern, pr)
-          if (fr === fl) return true
-        }
-        return false
-      }
-
-      // something other than **
-      // non-magic patterns just have to match exactly
-      // patterns with magic have been turned into regexps.
-      var hit
-      if (typeof p === 'string') {
-        hit = f === p
-        this.debug('string match', p, f, hit)
-      } else {
-        hit = f.match(p)
-        this.debug('pattern match', p, f, hit)
-      }
-
-      if (!hit) return false
-    }
-
-    // Note: ending in / means that we'll get a final ""
-    // at the end of the pattern.  This can only match a
-    // corresponding "" at the end of the file.
-    // If the file ends in /, then it can only match a
-    // a pattern that ends in /, unless the pattern just
-    // doesn't have any more for it. But, a/b/ should *not*
-    // match "a/b/*", even though "" matches against the
-    // [^/]*? pattern, except in partial mode, where it might
-    // simply not be reached yet.
-    // However, a/b/ should still satisfy a/*
-
-    // now either we fell off the end of the pattern, or we're done.
-    if (fi === fl && pi === pl) {
-      // ran out of pattern and filename at the same time.
-      // an exact hit!
-      return true
-    } else if (fi === fl) {
-      // ran out of file, but still had pattern left.
-      // this is ok if we're doing the match as part of
-      // a glob fs traversal.
-      return partial
-    } else /* istanbul ignore else */ if (pi === pl) {
-      // ran out of pattern, still have file left.
-      // this is only acceptable if we're on the very last
-      // empty segment of a file with a trailing slash.
-      // a/* should match a/b/
-      return (fi === fl - 1) && (file[fi] === '')
-    }
-
-    // should be unreachable.
-    /* istanbul ignore next */
-    throw new Error('wtf?')
-  }
-
-  braceExpand () {
-    return braceExpand(this.pattern, this.options)
-  }
-
-  parse (pattern, isSub) {
-    assertValidPattern(pattern)
-
-    const options = this.options
-
-    // shortcuts
-    if (pattern === '**') {
-      if (!options.noglobstar)
-        return GLOBSTAR
-      else
-        pattern = '*'
-    }
-    if (pattern === '') return ''
-
-    let re = ''
-    let hasMagic = !!options.nocase
-    let escaping = false
-    // ? => one single character
-    const patternListStack = []
-    const negativeLists = []
-    let stateChar
-    let inClass = false
-    let reClassStart = -1
-    let classStart = -1
-    let cs
-    let pl
-    let sp
-    // . and .. never match anything that doesn't start with .,
-    // even when options.dot is set.
-    const patternStart = pattern.charAt(0) === '.' ? '' // anything
-    // not (start or / followed by . or .. followed by / or end)
-    : options.dot ? '(?!(?:^|\\\/)\\.{1,2}(?:$|\\\/))'
-    : '(?!\\.)'
-
-    const clearStateChar = () => {
-      if (stateChar) {
-        // we had some state-tracking character
-        // that wasn't consumed by this pass.
-        switch (stateChar) {
-          case '*':
-            re += star
-            hasMagic = true
-          break
-          case '?':
-            re += qmark
-            hasMagic = true
-          break
-          default:
-            re += '\\' + stateChar
-          break
-        }
-        this.debug('clearStateChar %j %j', stateChar, re)
-        stateChar = false
-      }
-    }
-
-    for (let i = 0, c; (i < pattern.length) && (c = pattern.charAt(i)); i++) {
-      this.debug('%s\t%s %s %j', pattern, i, re, c)
-
-      // skip over any that are escaped.
-      if (escaping) {
-        /* istanbul ignore next - completely not allowed, even escaped. */
-        if (c === '/') {
-          return false
-        }
-
-        if (reSpecials[c]) {
-          re += '\\'
-        }
-        re += c
-        escaping = false
-        continue
-      }
-
-      switch (c) {
-        /* istanbul ignore next */
-        case '/': {
-          // Should already be path-split by now.
-          return false
-        }
-
-        case '\\':
-          clearStateChar()
-          escaping = true
-        continue
-
-        // the various stateChar values
-        // for the "extglob" stuff.
-        case '?':
-        case '*':
-        case '+':
-        case '@':
-        case '!':
-          this.debug('%s\t%s %s %j <-- stateChar', pattern, i, re, c)
-
-          // all of those are literals inside a class, except that
-          // the glob [!a] means [^a] in regexp
-          if (inClass) {
-            this.debug('  in class')
-            if (c === '!' && i === classStart + 1) c = '^'
-            re += c
-            continue
-          }
-
-          // if we already have a stateChar, then it means
-          // that there was something like ** or +? in there.
-          // Handle the stateChar, then proceed with this one.
-          this.debug('call clearStateChar %j', stateChar)
-          clearStateChar()
-          stateChar = c
-          // if extglob is disabled, then +(asdf|foo) isn't a thing.
-          // just clear the statechar *now*, rather than even diving into
-          // the patternList stuff.
-          if (options.noext) clearStateChar()
-        continue
-
-        case '(':
-          if (inClass) {
-            re += '('
-            continue
-          }
-
-          if (!stateChar) {
-            re += '\\('
-            continue
-          }
-
-          patternListStack.push({
-            type: stateChar,
-            start: i - 1,
-            reStart: re.length,
-            open: plTypes[stateChar].open,
-            close: plTypes[stateChar].close
-          })
-          // negation is (?:(?!js)[^/]*)
-          re += stateChar === '!' ? '(?:(?!(?:' : '(?:'
-          this.debug('plType %j %j', stateChar, re)
-          stateChar = false
-        continue
-
-        case ')':
-          if (inClass || !patternListStack.length) {
-            re += '\\)'
-            continue
-          }
-
-          clearStateChar()
-          hasMagic = true
-          pl = patternListStack.pop()
-          // negation is (?:(?!js)[^/]*)
-          // The others are (?:<pattern>)<type>
-          re += pl.close
-          if (pl.type === '!') {
-            negativeLists.push(pl)
-          }
-          pl.reEnd = re.length
-        continue
-
-        case '|':
-          if (inClass || !patternListStack.length) {
-            re += '\\|'
-            continue
-          }
-
-          clearStateChar()
-          re += '|'
-        continue
-
-        // these are mostly the same in regexp and glob
-        case '[':
-          // swallow any state-tracking char before the [
-          clearStateChar()
-
-          if (inClass) {
-            re += '\\' + c
-            continue
-          }
-
-          inClass = true
-          classStart = i
-          reClassStart = re.length
-          re += c
-        continue
-
-        case ']':
-          //  a right bracket shall lose its special
-          //  meaning and represent itself in
-          //  a bracket expression if it occurs
-          //  first in the list.  -- POSIX.2 2.8.3.2
-          if (i === classStart + 1 || !inClass) {
-            re += '\\' + c
-            continue
-          }
-
-          // handle the case where we left a class open.
-          // "[z-a]" is valid, equivalent to "\[z-a\]"
-          // split where the last [ was, make sure we don't have
-          // an invalid re. if so, re-walk the contents of the
-          // would-be class to re-translate any characters that
-          // were passed through as-is
-          // TODO: It would probably be faster to determine this
-          // without a try/catch and a new RegExp, but it's tricky
-          // to do safely.  For now, this is safe and works.
-          cs = pattern.substring(classStart + 1, i)
-          try {
-            RegExp('[' + cs + ']')
-          } catch (er) {
-            // not a valid class!
-            sp = this.parse(cs, SUBPARSE)
-            re = re.substr(0, reClassStart) + '\\[' + sp[0] + '\\]'
-            hasMagic = hasMagic || sp[1]
-            inClass = false
-            continue
-          }
-
-          // finish up the class.
-          hasMagic = true
-          inClass = false
-          re += c
-        continue
-
-        default:
-          // swallow any state char that wasn't consumed
-          clearStateChar()
-
-          if (reSpecials[c] && !(c === '^' && inClass)) {
-            re += '\\'
-          }
-
-          re += c
-          break
-
-      } // switch
-    } // for
-
-    // handle the case where we left a class open.
-    // "[abc" is valid, equivalent to "\[abc"
-    if (inClass) {
-      // split where the last [ was, and escape it
-      // this is a huge pita.  We now have to re-walk
-      // the contents of the would-be class to re-translate
-      // any characters that were passed through as-is
-      cs = pattern.substr(classStart + 1)
-      sp = this.parse(cs, SUBPARSE)
-      re = re.substr(0, reClassStart) + '\\[' + sp[0]
-      hasMagic = hasMagic || sp[1]
-    }
-
-    // handle the case where we had a +( thing at the *end*
-    // of the pattern.
-    // each pattern list stack adds 3 chars, and we need to go through
-    // and escape any | chars that were passed through as-is for the regexp.
-    // Go through and escape them, taking care not to double-escape any
-    // | chars that were already escaped.
-    for (pl = patternListStack.pop(); pl; pl = patternListStack.pop()) {
-      let tail
-      tail = re.slice(pl.reStart + pl.open.length)
-      this.debug('setting tail', re, pl)
-      // maybe some even number of \, then maybe 1 \, followed by a |
-      tail = tail.replace(/((?:\\{2}){0,64})(\\?)\|/g, (_, $1, $2) => {
-        /* istanbul ignore else - should already be done */
-        if (!$2) {
-          // the | isn't already escaped, so escape it.
-          $2 = '\\'
-        }
-
-        // need to escape all those slashes *again*, without escaping the
-        // one that we need for escaping the | character.  As it works out,
-        // escaping an even number of slashes can be done by simply repeating
-        // it exactly after itself.  That's why this trick works.
-        //
-        // I am sorry that you have to see this.
-        return $1 + $1 + $2 + '|'
-      })
-
-      this.debug('tail=%j\n   %s', tail, tail, pl, re)
-      const t = pl.type === '*' ? star
-        : pl.type === '?' ? qmark
-        : '\\' + pl.type
-
-      hasMagic = true
-      re = re.slice(0, pl.reStart) + t + '\\(' + tail
-    }
-
-    // handle trailing things that only matter at the very end.
-    clearStateChar()
-    if (escaping) {
-      // trailing \\
-      re += '\\\\'
-    }
-
-    // only need to apply the nodot start if the re starts with
-    // something that could conceivably capture a dot
-    const addPatternStart = addPatternStartSet[re.charAt(0)]
-
-    // Hack to work around lack of negative lookbehind in JS
-    // A pattern like: *.!(x).!(y|z) needs to ensure that a name
-    // like 'a.xyz.yz' doesn't match.  So, the first negative
-    // lookahead, has to look ALL the way ahead, to the end of
-    // the pattern.
-    for (let n = negativeLists.length - 1; n > -1; n--) {
-      const nl = negativeLists[n]
-
-      const nlBefore = re.slice(0, nl.reStart)
-      const nlFirst = re.slice(nl.reStart, nl.reEnd - 8)
-      let nlAfter = re.slice(nl.reEnd)
-      const nlLast = re.slice(nl.reEnd - 8, nl.reEnd) + nlAfter
-
-      // Handle nested stuff like *(*.js|!(*.json)), where open parens
-      // mean that we should *not* include the ) in the bit that is considered
-      // "after" the negated section.
-      const openParensBefore = nlBefore.split('(').length - 1
-      let cleanAfter = nlAfter
-      for (let i = 0; i < openParensBefore; i++) {
-        cleanAfter = cleanAfter.replace(/\)[+*?]?/, '')
-      }
-      nlAfter = cleanAfter
-
-      const dollar = nlAfter === '' && isSub !== SUBPARSE ? '$' : ''
-      re = nlBefore + nlFirst + nlAfter + dollar + nlLast
-    }
-
-    // if the re is not "" at this point, then we need to make sure
-    // it doesn't match against an empty path part.
-    // Otherwise a/* will match a/, which it should not.
-    if (re !== '' && hasMagic) {
-      re = '(?=.)' + re
-    }
-
-    if (addPatternStart) {
-      re = patternStart + re
-    }
-
-    // parsing just a piece of a larger pattern.
-    if (isSub === SUBPARSE) {
-      return [re, hasMagic]
-    }
-
-    // skip the regexp for non-magical patterns
-    // unescape anything in it, though, so that it'll be
-    // an exact match against a file etc.
-    if (!hasMagic) {
-      return globUnescape(pattern)
-    }
-
-    const flags = options.nocase ? 'i' : ''
-    try {
-      return Object.assign(new RegExp('^' + re + '$', flags), {
-        _glob: pattern,
-        _src: re,
-      })
-    } catch (er) /* istanbul ignore next - should be impossible */ {
-      // If it was an invalid regular expression, then it can't match
-      // anything.  This trick looks for a character after the end of
-      // the string, which is of course impossible, except in multi-line
-      // mode, but it's not a /m regex.
-      return new RegExp('$.')
-    }
-  }
-
-  makeRe () {
-    if (this.regexp || this.regexp === false) return this.regexp
-
-    // at this point, this.set is a 2d array of partial
-    // pattern strings, or "**".
-    //
-    // It's better to use .match().  This function shouldn't
-    // be used, really, but it's pretty convenient sometimes,
-    // when you just want to work with a regex.
-    const set = this.set
-
-    if (!set.length) {
-      this.regexp = false
-      return this.regexp
-    }
-    const options = this.options
-
-    const twoStar = options.noglobstar ? star
-      : options.dot ? twoStarDot
-      : twoStarNoDot
-    const flags = options.nocase ? 'i' : ''
-
-    // coalesce globstars and regexpify non-globstar patterns
-    // if it's the only item, then we just do one twoStar
-    // if it's the first, and there are more, prepend (\/|twoStar\/)? to next
-    // if it's the last, append (\/twoStar|) to previous
-    // if it's in the middle, append (\/|\/twoStar\/) to previous
-    // then filter out GLOBSTAR symbols
-    let re = set.map(pattern => {
-      pattern = pattern.map(p =>
-        typeof p === 'string' ? regExpEscape(p)
-        : p === GLOBSTAR ? GLOBSTAR
-        : p._src
-      ).reduce((set, p) => {
-        if (!(set[set.length - 1] === GLOBSTAR && p === GLOBSTAR)) {
-          set.push(p)
-        }
-        return set
-      }, [])
-      pattern.forEach((p, i) => {
-        if (p !== GLOBSTAR || pattern[i-1] === GLOBSTAR) {
-          return
-        }
-        if (i === 0) {
-          if (pattern.length > 1) {
-            pattern[i+1] = '(?:\\\/|' + twoStar + '\\\/)?' + pattern[i+1]
-          } else {
-            pattern[i] = twoStar
-          }
-        } else if (i === pattern.length - 1) {
-          pattern[i-1] += '(?:\\\/|' + twoStar + ')?'
-        } else {
-          pattern[i-1] += '(?:\\\/|\\\/' + twoStar + '\\\/)' + pattern[i+1]
-          pattern[i+1] = GLOBSTAR
-        }
-      })
-      return pattern.filter(p => p !== GLOBSTAR).join('/')
-    }).join('|')
-
-    // must match entire pattern
-    // ending in a * or ** will make it less strict.
-    re = '^(?:' + re + ')$'
-
-    // can match anything, as long as it's not this.
-    if (this.negate) re = '^(?!' + re + ').*$'
-
-    try {
-      this.regexp = new RegExp(re, flags)
-    } catch (ex) /* istanbul ignore next - should be impossible */ {
-      this.regexp = false
-    }
-    return this.regexp
-  }
-
-  match (f, partial = this.partial) {
-    this.debug('match', f, this.pattern)
-    // short-circuit in the case of busted things.
-    // comments, etc.
-    if (this.comment) return false
-    if (this.empty) return f === ''
-
-    if (f === '/' && partial) return true
-
-    const options = this.options
-
-    // windows: need to use /, not \
-    if (path.sep !== '/') {
-      f = f.split(path.sep).join('/')
-    }
-
-    // treat the test path as a set of pathparts.
-    f = f.split(slashSplit)
-    this.debug(this.pattern, 'split', f)
-
-    // just ONE of the pattern sets in this.set needs to match
-    // in order for it to be valid.  If negating, then just one
-    // match means that we have failed.
-    // Either way, return on the first hit.
-
-    const set = this.set
-    this.debug(this.pattern, 'set', set)
-
-    // Find the basename of the path by looking for the last non-empty segment
-    let filename
-    for (let i = f.length - 1; i >= 0; i--) {
-      filename = f[i]
-      if (filename) break
-    }
-
-    for (let i = 0; i < set.length; i++) {
-      const pattern = set[i]
-      let file = f
-      if (options.matchBase && pattern.length === 1) {
-        file = [filename]
-      }
-      const hit = this.matchOne(file, pattern, partial)
-      if (hit) {
-        if (options.flipNegate) return true
-        return !this.negate
-      }
-    }
-
-    // didn't get any hits.  this is success if it's a negative
-    // pattern, failure otherwise.
-    if (options.flipNegate) return false
-    return this.negate
-  }
-
-  static defaults (def) {
-    return minimatch.defaults(def).Minimatch
-  }
-}
-
-minimatch.Minimatch = Minimatch
-
-
-/***/ }),
-
-/***/ 9010:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-module.exports = globSync
-globSync.GlobSync = GlobSync
-
-var rp = __nccwpck_require__(6863)
-var minimatch = __nccwpck_require__(6453)
-var Minimatch = minimatch.Minimatch
-var Glob = (__nccwpck_require__(1957).Glob)
-var util = __nccwpck_require__(3837)
-var path = __nccwpck_require__(1017)
-var assert = __nccwpck_require__(9491)
-var isAbsolute = (__nccwpck_require__(1017).isAbsolute)
-var common = __nccwpck_require__(7625)
-var setopts = common.setopts
-var ownProp = common.ownProp
-var childrenIgnored = common.childrenIgnored
-var isIgnored = common.isIgnored
-
-function globSync (pattern, options) {
-  if (typeof options === 'function' || arguments.length === 3)
-    throw new TypeError('callback provided to sync glob\n'+
-                        'See: https://github.com/isaacs/node-glob/issues/167')
-
-  return new GlobSync(pattern, options).found
-}
-
-function GlobSync (pattern, options) {
-  if (!pattern)
-    throw new Error('must provide pattern')
-
-  if (typeof options === 'function' || arguments.length === 3)
-    throw new TypeError('callback provided to sync glob\n'+
-                        'See: https://github.com/isaacs/node-glob/issues/167')
-
-  if (!(this instanceof GlobSync))
-    return new GlobSync(pattern, options)
-
-  setopts(this, pattern, options)
-
-  if (this.noprocess)
-    return this
-
-  var n = this.minimatch.set.length
-  this.matches = new Array(n)
-  for (var i = 0; i < n; i ++) {
-    this._process(this.minimatch.set[i], i, false)
-  }
-  this._finish()
-}
-
-GlobSync.prototype._finish = function () {
-  assert.ok(this instanceof GlobSync)
-  if (this.realpath) {
-    var self = this
-    this.matches.forEach(function (matchset, index) {
-      var set = self.matches[index] = Object.create(null)
-      for (var p in matchset) {
-        try {
-          p = self._makeAbs(p)
-          var real = rp.realpathSync(p, self.realpathCache)
-          set[real] = true
-        } catch (er) {
-          if (er.syscall === 'stat')
-            set[self._makeAbs(p)] = true
-          else
-            throw er
-        }
-      }
-    })
-  }
-  common.finish(this)
-}
-
-
-GlobSync.prototype._process = function (pattern, index, inGlobStar) {
-  assert.ok(this instanceof GlobSync)
-
-  // Get the first [n] parts of pattern that are all strings.
-  var n = 0
-  while (typeof pattern[n] === 'string') {
-    n ++
-  }
-  // now n is the index of the first one that is *not* a string.
-
-  // See if there's anything else
-  var prefix
-  switch (n) {
-    // if not, then this is rather simple
-    case pattern.length:
-      this._processSimple(pattern.join('/'), index)
-      return
-
-    case 0:
-      // pattern *starts* with some non-trivial item.
-      // going to readdir(cwd), but not include the prefix in matches.
-      prefix = null
-      break
-
-    default:
-      // pattern has some string bits in the front.
-      // whatever it starts with, whether that's 'absolute' like /foo/bar,
-      // or 'relative' like '../baz'
-      prefix = pattern.slice(0, n).join('/')
-      break
-  }
-
-  var remain = pattern.slice(n)
-
-  // get the list of entries.
-  var read
-  if (prefix === null)
-    read = '.'
-  else if (isAbsolute(prefix) ||
-      isAbsolute(pattern.map(function (p) {
-        return typeof p === 'string' ? p : '[*]'
-      }).join('/'))) {
-    if (!prefix || !isAbsolute(prefix))
-      prefix = '/' + prefix
-    read = prefix
-  } else
-    read = prefix
-
-  var abs = this._makeAbs(read)
-
-  //if ignored, skip processing
-  if (childrenIgnored(this, read))
-    return
-
-  var isGlobStar = remain[0] === minimatch.GLOBSTAR
-  if (isGlobStar)
-    this._processGlobStar(prefix, read, abs, remain, index, inGlobStar)
-  else
-    this._processReaddir(prefix, read, abs, remain, index, inGlobStar)
-}
-
-
-GlobSync.prototype._processReaddir = function (prefix, read, abs, remain, index, inGlobStar) {
-  var entries = this._readdir(abs, inGlobStar)
-
-  // if the abs isn't a dir, then nothing can match!
-  if (!entries)
-    return
-
-  // It will only match dot entries if it starts with a dot, or if
-  // dot is set.  Stuff like @(.foo|.bar) isn't allowed.
-  var pn = remain[0]
-  var negate = !!this.minimatch.negate
-  var rawGlob = pn._glob
-  var dotOk = this.dot || rawGlob.charAt(0) === '.'
-
-  var matchedEntries = []
-  for (var i = 0; i < entries.length; i++) {
-    var e = entries[i]
-    if (e.charAt(0) !== '.' || dotOk) {
-      var m
-      if (negate && !prefix) {
-        m = !e.match(pn)
-      } else {
-        m = e.match(pn)
-      }
-      if (m)
-        matchedEntries.push(e)
-    }
-  }
-
-  var len = matchedEntries.length
-  // If there are no matched entries, then nothing matches.
-  if (len === 0)
-    return
-
-  // if this is the last remaining pattern bit, then no need for
-  // an additional stat *unless* the user has specified mark or
-  // stat explicitly.  We know they exist, since readdir returned
-  // them.
-
-  if (remain.length === 1 && !this.mark && !this.stat) {
-    if (!this.matches[index])
-      this.matches[index] = Object.create(null)
-
-    for (var i = 0; i < len; i ++) {
-      var e = matchedEntries[i]
-      if (prefix) {
-        if (prefix.slice(-1) !== '/')
-          e = prefix + '/' + e
-        else
-          e = prefix + e
-      }
-
-      if (e.charAt(0) === '/' && !this.nomount) {
-        e = path.join(this.root, e)
-      }
-      this._emitMatch(index, e)
-    }
-    // This was the last one, and no stats were needed
-    return
-  }
-
-  // now test all matched entries as stand-ins for that part
-  // of the pattern.
-  remain.shift()
-  for (var i = 0; i < len; i ++) {
-    var e = matchedEntries[i]
-    var newPattern
-    if (prefix)
-      newPattern = [prefix, e]
-    else
-      newPattern = [e]
-    this._process(newPattern.concat(remain), index, inGlobStar)
-  }
-}
-
-
-GlobSync.prototype._emitMatch = function (index, e) {
-  if (isIgnored(this, e))
-    return
-
-  var abs = this._makeAbs(e)
-
-  if (this.mark)
-    e = this._mark(e)
-
-  if (this.absolute) {
-    e = abs
-  }
-
-  if (this.matches[index][e])
-    return
-
-  if (this.nodir) {
-    var c = this.cache[abs]
-    if (c === 'DIR' || Array.isArray(c))
-      return
-  }
-
-  this.matches[index][e] = true
-
-  if (this.stat)
-    this._stat(e)
-}
-
-
-GlobSync.prototype._readdirInGlobStar = function (abs) {
-  // follow all symlinked directories forever
-  // just proceed as if this is a non-globstar situation
-  if (this.follow)
-    return this._readdir(abs, false)
-
-  var entries
-  var lstat
-  var stat
-  try {
-    lstat = this.fs.lstatSync(abs)
-  } catch (er) {
-    if (er.code === 'ENOENT') {
-      // lstat failed, doesn't exist
-      return null
-    }
-  }
-
-  var isSym = lstat && lstat.isSymbolicLink()
-  this.symlinks[abs] = isSym
-
-  // If it's not a symlink or a dir, then it's definitely a regular file.
-  // don't bother doing a readdir in that case.
-  if (!isSym && lstat && !lstat.isDirectory())
-    this.cache[abs] = 'FILE'
-  else
-    entries = this._readdir(abs, false)
-
-  return entries
-}
-
-GlobSync.prototype._readdir = function (abs, inGlobStar) {
-  var entries
-
-  if (inGlobStar && !ownProp(this.symlinks, abs))
-    return this._readdirInGlobStar(abs)
-
-  if (ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-    if (!c || c === 'FILE')
-      return null
-
-    if (Array.isArray(c))
-      return c
-  }
-
-  try {
-    return this._readdirEntries(abs, this.fs.readdirSync(abs))
-  } catch (er) {
-    this._readdirError(abs, er)
-    return null
-  }
-}
-
-GlobSync.prototype._readdirEntries = function (abs, entries) {
-  // if we haven't asked to stat everything, then just
-  // assume that everything in there exists, so we can avoid
-  // having to stat it a second time.
-  if (!this.mark && !this.stat) {
-    for (var i = 0; i < entries.length; i ++) {
-      var e = entries[i]
-      if (abs === '/')
-        e = abs + e
-      else
-        e = abs + '/' + e
-      this.cache[e] = true
-    }
-  }
-
-  this.cache[abs] = entries
-
-  // mark and cache dir-ness
-  return entries
-}
-
-GlobSync.prototype._readdirError = function (f, er) {
-  // handle errors, and cache the information
-  switch (er.code) {
-    case 'ENOTSUP': // https://github.com/isaacs/node-glob/issues/205
-    case 'ENOTDIR': // totally normal. means it *does* exist.
-      var abs = this._makeAbs(f)
-      this.cache[abs] = 'FILE'
-      if (abs === this.cwdAbs) {
-        var error = new Error(er.code + ' invalid cwd ' + this.cwd)
-        error.path = this.cwd
-        error.code = er.code
-        throw error
-      }
-      break
-
-    case 'ENOENT': // not terribly unusual
-    case 'ELOOP':
-    case 'ENAMETOOLONG':
-    case 'UNKNOWN':
-      this.cache[this._makeAbs(f)] = false
-      break
-
-    default: // some unusual error.  Treat as failure.
-      this.cache[this._makeAbs(f)] = false
-      if (this.strict)
-        throw er
-      if (!this.silent)
-        console.error('glob error', er)
-      break
-  }
-}
-
-GlobSync.prototype._processGlobStar = function (prefix, read, abs, remain, index, inGlobStar) {
-
-  var entries = this._readdir(abs, inGlobStar)
-
-  // no entries means not a dir, so it can never have matches
-  // foo.txt/** doesn't match foo.txt
-  if (!entries)
-    return
-
-  // test without the globstar, and with every child both below
-  // and replacing the globstar.
-  var remainWithoutGlobStar = remain.slice(1)
-  var gspref = prefix ? [ prefix ] : []
-  var noGlobStar = gspref.concat(remainWithoutGlobStar)
-
-  // the noGlobStar pattern exits the inGlobStar state
-  this._process(noGlobStar, index, false)
-
-  var len = entries.length
-  var isSym = this.symlinks[abs]
-
-  // If it's a symlink, and we're in a globstar, then stop
-  if (isSym && inGlobStar)
-    return
-
-  for (var i = 0; i < len; i++) {
-    var e = entries[i]
-    if (e.charAt(0) === '.' && !this.dot)
-      continue
-
-    // these two cases enter the inGlobStar state
-    var instead = gspref.concat(entries[i], remainWithoutGlobStar)
-    this._process(instead, index, true)
-
-    var below = gspref.concat(entries[i], remain)
-    this._process(below, index, true)
-  }
-}
-
-GlobSync.prototype._processSimple = function (prefix, index) {
-  // XXX review this.  Shouldn't it be doing the mounting etc
-  // before doing stat?  kinda weird?
-  var exists = this._stat(prefix)
-
-  if (!this.matches[index])
-    this.matches[index] = Object.create(null)
-
-  // If it doesn't exist, then just mark the lack of results
-  if (!exists)
-    return
-
-  if (prefix && isAbsolute(prefix) && !this.nomount) {
-    var trail = /[\/\\]$/.test(prefix)
-    if (prefix.charAt(0) === '/') {
-      prefix = path.join(this.root, prefix)
-    } else {
-      prefix = path.resolve(this.root, prefix)
-      if (trail)
-        prefix += '/'
-    }
-  }
-
-  if (process.platform === 'win32')
-    prefix = prefix.replace(/\\/g, '/')
-
-  // Mark this as a match
-  this._emitMatch(index, prefix)
-}
-
-// Returns either 'DIR', 'FILE', or false
-GlobSync.prototype._stat = function (f) {
-  var abs = this._makeAbs(f)
-  var needDir = f.slice(-1) === '/'
-
-  if (f.length > this.maxLength)
-    return false
-
-  if (!this.stat && ownProp(this.cache, abs)) {
-    var c = this.cache[abs]
-
-    if (Array.isArray(c))
-      c = 'DIR'
-
-    // It exists, but maybe not how we need it
-    if (!needDir || c === 'DIR')
-      return c
-
-    if (needDir && c === 'FILE')
-      return false
-
-    // otherwise we have to stat, because maybe c=true
-    // if we know it exists, but not what it is.
-  }
-
-  var exists
-  var stat = this.statCache[abs]
-  if (!stat) {
-    var lstat
-    try {
-      lstat = this.fs.lstatSync(abs)
-    } catch (er) {
-      if (er && (er.code === 'ENOENT' || er.code === 'ENOTDIR')) {
-        this.statCache[abs] = false
-        return false
-      }
-    }
-
-    if (lstat && lstat.isSymbolicLink()) {
-      try {
-        stat = this.fs.statSync(abs)
-      } catch (er) {
-        stat = lstat
-      }
-    } else {
-      stat = lstat
-    }
-  }
-
-  this.statCache[abs] = stat
-
-  var c = true
-  if (stat)
-    c = stat.isDirectory() ? 'DIR' : 'FILE'
-
-  this.cache[abs] = this.cache[abs] || c
-
-  if (needDir && c === 'FILE')
-    return false
-
-  return c
-}
-
-GlobSync.prototype._mark = function (p) {
-  return common.mark(this, p)
-}
-
-GlobSync.prototype._makeAbs = function (f) {
-  return common.makeAbs(this, f)
-}
 
 
 /***/ }),
@@ -10902,117 +10935,6 @@ module.exports = (flag, argv = process.argv) => {
 
 /***/ }),
 
-/***/ 2492:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-var wrappy = __nccwpck_require__(2940)
-var reqs = Object.create(null)
-var once = __nccwpck_require__(1223)
-
-module.exports = wrappy(inflight)
-
-function inflight (key, cb) {
-  if (reqs[key]) {
-    reqs[key].push(cb)
-    return null
-  } else {
-    reqs[key] = [cb]
-    return makeres(key)
-  }
-}
-
-function makeres (key) {
-  return once(function RES () {
-    var cbs = reqs[key]
-    var len = cbs.length
-    var args = slice(arguments)
-
-    // XXX It's somewhat ambiguous whether a new callback added in this
-    // pass should be queued for later execution if something in the
-    // list of callbacks throws, or if it should just be discarded.
-    // However, it's such an edge case that it hardly matters, and either
-    // choice is likely as surprising as the other.
-    // As it happens, we do go ahead and schedule it for later execution.
-    try {
-      for (var i = 0; i < len; i++) {
-        cbs[i].apply(null, args)
-      }
-    } finally {
-      if (cbs.length > len) {
-        // added more in the interim.
-        // de-zalgo, just in case, but don't call again.
-        cbs.splice(0, len)
-        process.nextTick(function () {
-          RES.apply(null, args)
-        })
-      } else {
-        delete reqs[key]
-      }
-    }
-  })
-}
-
-function slice (args) {
-  var length = args.length
-  var array = []
-
-  for (var i = 0; i < length; i++) array[i] = args[i]
-  return array
-}
-
-
-/***/ }),
-
-/***/ 4124:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-try {
-  var util = __nccwpck_require__(3837);
-  /* istanbul ignore next */
-  if (typeof util.inherits !== 'function') throw '';
-  module.exports = util.inherits;
-} catch (e) {
-  /* istanbul ignore next */
-  module.exports = __nccwpck_require__(8544);
-}
-
-
-/***/ }),
-
-/***/ 8544:
-/***/ ((module) => {
-
-if (typeof Object.create === 'function') {
-  // implementation from standard node.js 'util' module
-  module.exports = function inherits(ctor, superCtor) {
-    if (superCtor) {
-      ctor.super_ = superCtor
-      ctor.prototype = Object.create(superCtor.prototype, {
-        constructor: {
-          value: ctor,
-          enumerable: false,
-          writable: true,
-          configurable: true
-        }
-      })
-    }
-  };
-} else {
-  // old school shim for old browsers
-  module.exports = function inherits(ctor, superCtor) {
-    if (superCtor) {
-      ctor.super_ = superCtor
-      var TempCtor = function () {}
-      TempCtor.prototype = superCtor.prototype
-      ctor.prototype = new TempCtor()
-      ctor.prototype.constructor = ctor
-    }
-  }
-}
-
-
-/***/ }),
-
 /***/ 6160:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -11125,1840 +11047,6 @@ function stripBom (content) {
 }
 
 module.exports = { stringify, stripBom }
-
-
-/***/ }),
-
-/***/ 1568:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var helpers = __nccwpck_require__(4801);
-
-/** @type ValidatorResult */
-var ValidatorResult = helpers.ValidatorResult;
-/** @type SchemaError */
-var SchemaError = helpers.SchemaError;
-
-var attribute = {};
-
-attribute.ignoreProperties = {
-  // informative properties
-  'id': true,
-  'default': true,
-  'description': true,
-  'title': true,
-  // arguments to other properties
-  'additionalItems': true,
-  'then': true,
-  'else': true,
-  // special-handled properties
-  '$schema': true,
-  '$ref': true,
-  'extends': true,
-};
-
-/**
- * @name validators
- */
-var validators = attribute.validators = {};
-
-/**
- * Validates whether the instance if of a certain type
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {ValidatorResult|null}
- */
-validators.type = function validateType (instance, schema, options, ctx) {
-  // Ignore undefined instances
-  if (instance === undefined) {
-    return null;
-  }
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var types = Array.isArray(schema.type) ? schema.type : [schema.type];
-  if (!types.some(this.testType.bind(this, instance, schema, options, ctx))) {
-    var list = types.map(function (v) {
-      if(!v) return;
-      var id = v.$id || v.id;
-      return id ? ('<' + id + '>') : (v+'');
-    });
-    result.addError({
-      name: 'type',
-      argument: list,
-      message: "is not of a type(s) " + list,
-    });
-  }
-  return result;
-};
-
-function testSchemaNoThrow(instance, options, ctx, callback, schema){
-  var throwError = options.throwError;
-  var throwAll = options.throwAll;
-  options.throwError = false;
-  options.throwAll = false;
-  var res = this.validateSchema(instance, schema, options, ctx);
-  options.throwError = throwError;
-  options.throwAll = throwAll;
-
-  if (!res.valid && callback instanceof Function) {
-    callback(res);
-  }
-  return res.valid;
-}
-
-/**
- * Validates whether the instance matches some of the given schemas
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {ValidatorResult|null}
- */
-validators.anyOf = function validateAnyOf (instance, schema, options, ctx) {
-  // Ignore undefined instances
-  if (instance === undefined) {
-    return null;
-  }
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var inner = new ValidatorResult(instance, schema, options, ctx);
-  if (!Array.isArray(schema.anyOf)){
-    throw new SchemaError("anyOf must be an array");
-  }
-  if (!schema.anyOf.some(
-    testSchemaNoThrow.bind(
-      this, instance, options, ctx, function(res){inner.importErrors(res);}
-    ))) {
-    var list = schema.anyOf.map(function (v, i) {
-      var id = v.$id || v.id;
-      if(id) return '<' + id + '>';
-      return(v.title && JSON.stringify(v.title)) || (v['$ref'] && ('<' + v['$ref'] + '>')) || '[subschema '+i+']';
-    });
-    if (options.nestedErrors) {
-      result.importErrors(inner);
-    }
-    result.addError({
-      name: 'anyOf',
-      argument: list,
-      message: "is not any of " + list.join(','),
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance matches every given schema
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null}
- */
-validators.allOf = function validateAllOf (instance, schema, options, ctx) {
-  // Ignore undefined instances
-  if (instance === undefined) {
-    return null;
-  }
-  if (!Array.isArray(schema.allOf)){
-    throw new SchemaError("allOf must be an array");
-  }
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var self = this;
-  schema.allOf.forEach(function(v, i){
-    var valid = self.validateSchema(instance, v, options, ctx);
-    if(!valid.valid){
-      var id = v.$id || v.id;
-      var msg = id || (v.title && JSON.stringify(v.title)) || (v['$ref'] && ('<' + v['$ref'] + '>')) || '[subschema '+i+']';
-      result.addError({
-        name: 'allOf',
-        argument: { id: msg, length: valid.errors.length, valid: valid },
-        message: 'does not match allOf schema ' + msg + ' with ' + valid.errors.length + ' error[s]:',
-      });
-      result.importErrors(valid);
-    }
-  });
-  return result;
-};
-
-/**
- * Validates whether the instance matches exactly one of the given schemas
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null}
- */
-validators.oneOf = function validateOneOf (instance, schema, options, ctx) {
-  // Ignore undefined instances
-  if (instance === undefined) {
-    return null;
-  }
-  if (!Array.isArray(schema.oneOf)){
-    throw new SchemaError("oneOf must be an array");
-  }
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var inner = new ValidatorResult(instance, schema, options, ctx);
-  var count = schema.oneOf.filter(
-    testSchemaNoThrow.bind(
-      this, instance, options, ctx, function(res) {inner.importErrors(res);}
-    ) ).length;
-  var list = schema.oneOf.map(function (v, i) {
-    var id = v.$id || v.id;
-    return id || (v.title && JSON.stringify(v.title)) || (v['$ref'] && ('<' + v['$ref'] + '>')) || '[subschema '+i+']';
-  });
-  if (count!==1) {
-    if (options.nestedErrors) {
-      result.importErrors(inner);
-    }
-    result.addError({
-      name: 'oneOf',
-      argument: list,
-      message: "is not exactly one from " + list.join(','),
-    });
-  }
-  return result;
-};
-
-/**
- * Validates "then" or "else" depending on the result of validating "if"
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null}
- */
-validators.if = function validateIf (instance, schema, options, ctx) {
-  // Ignore undefined instances
-  if (instance === undefined) return null;
-  if (!helpers.isSchema(schema.if)) throw new Error('Expected "if" keyword to be a schema');
-  var ifValid = testSchemaNoThrow.call(this, instance, options, ctx, null, schema.if);
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var res;
-  if(ifValid){
-    if (schema.then === undefined) return;
-    if (!helpers.isSchema(schema.then)) throw new Error('Expected "then" keyword to be a schema');
-    res = this.validateSchema(instance, schema.then, options, ctx.makeChild(schema.then));
-    result.importErrors(res);
-  }else{
-    if (schema.else === undefined) return;
-    if (!helpers.isSchema(schema.else)) throw new Error('Expected "else" keyword to be a schema');
-    res = this.validateSchema(instance, schema.else, options, ctx.makeChild(schema.else));
-    result.importErrors(res);
-  }
-  return result;
-};
-
-function getEnumerableProperty(object, key){
-  // Determine if `key` shows up in `for(var key in object)`
-  // First test Object.hasOwnProperty.call as an optimization: that guarantees it does
-  if(Object.hasOwnProperty.call(object, key)) return object[key];
-  // Test `key in object` as an optimization; false means it won't
-  if(!(key in object)) return;
-  while( (object = Object.getPrototypeOf(object)) ){
-    if(Object.propertyIsEnumerable.call(object, key)) return object[key];
-  }
-}
-
-/**
- * Validates propertyNames
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null|ValidatorResult}
- */
-validators.propertyNames = function validatePropertyNames (instance, schema, options, ctx) {
-  if(!this.types.object(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var subschema = schema.propertyNames!==undefined ? schema.propertyNames : {};
-  if(!helpers.isSchema(subschema)) throw new SchemaError('Expected "propertyNames" to be a schema (object or boolean)');
-
-  for (var property in instance) {
-    if(getEnumerableProperty(instance, property) !== undefined){
-      var res = this.validateSchema(property, subschema, options, ctx.makeChild(subschema));
-      result.importErrors(res);
-    }
-  }
-
-  return result;
-};
-
-/**
- * Validates properties
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null|ValidatorResult}
- */
-validators.properties = function validateProperties (instance, schema, options, ctx) {
-  if(!this.types.object(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var properties = schema.properties || {};
-  for (var property in properties) {
-    var subschema = properties[property];
-    if(subschema===undefined){
-      continue;
-    }else if(subschema===null){
-      throw new SchemaError('Unexpected null, expected schema in "properties"');
-    }
-    if (typeof options.preValidateProperty == 'function') {
-      options.preValidateProperty(instance, property, subschema, options, ctx);
-    }
-    var prop = getEnumerableProperty(instance, property);
-    var res = this.validateSchema(prop, subschema, options, ctx.makeChild(subschema, property));
-    if(res.instance !== result.instance[property]) result.instance[property] = res.instance;
-    result.importErrors(res);
-  }
-  return result;
-};
-
-/**
- * Test a specific property within in instance against the additionalProperties schema attribute
- * This ignores properties with definitions in the properties schema attribute, but no other attributes.
- * If too many more types of property-existence tests pop up they may need their own class of tests (like `type` has)
- * @private
- * @return {boolean}
- */
-function testAdditionalProperty (instance, schema, options, ctx, property, result) {
-  if(!this.types.object(instance)) return;
-  if (schema.properties && schema.properties[property] !== undefined) {
-    return;
-  }
-  if (schema.additionalProperties === false) {
-    result.addError({
-      name: 'additionalProperties',
-      argument: property,
-      message: "is not allowed to have the additional property " + JSON.stringify(property),
-    });
-  } else {
-    var additionalProperties = schema.additionalProperties || {};
-
-    if (typeof options.preValidateProperty == 'function') {
-      options.preValidateProperty(instance, property, additionalProperties, options, ctx);
-    }
-
-    var res = this.validateSchema(instance[property], additionalProperties, options, ctx.makeChild(additionalProperties, property));
-    if(res.instance !== result.instance[property]) result.instance[property] = res.instance;
-    result.importErrors(res);
-  }
-}
-
-/**
- * Validates patternProperties
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null|ValidatorResult}
- */
-validators.patternProperties = function validatePatternProperties (instance, schema, options, ctx) {
-  if(!this.types.object(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var patternProperties = schema.patternProperties || {};
-
-  for (var property in instance) {
-    var test = true;
-    for (var pattern in patternProperties) {
-      var subschema = patternProperties[pattern];
-      if(subschema===undefined){
-        continue;
-      }else if(subschema===null){
-        throw new SchemaError('Unexpected null, expected schema in "patternProperties"');
-      }
-      try {
-        var regexp = new RegExp(pattern, 'u');
-      } catch(_e) {
-        // In the event the stricter handling causes an error, fall back on the forgiving handling
-        // DEPRECATED
-        regexp = new RegExp(pattern);
-      }
-      if (!regexp.test(property)) {
-        continue;
-      }
-      test = false;
-
-      if (typeof options.preValidateProperty == 'function') {
-        options.preValidateProperty(instance, property, subschema, options, ctx);
-      }
-
-      var res = this.validateSchema(instance[property], subschema, options, ctx.makeChild(subschema, property));
-      if(res.instance !== result.instance[property]) result.instance[property] = res.instance;
-      result.importErrors(res);
-    }
-    if (test) {
-      testAdditionalProperty.call(this, instance, schema, options, ctx, property, result);
-    }
-  }
-
-  return result;
-};
-
-/**
- * Validates additionalProperties
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null|ValidatorResult}
- */
-validators.additionalProperties = function validateAdditionalProperties (instance, schema, options, ctx) {
-  if(!this.types.object(instance)) return;
-  // if patternProperties is defined then we'll test when that one is called instead
-  if (schema.patternProperties) {
-    return null;
-  }
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  for (var property in instance) {
-    testAdditionalProperty.call(this, instance, schema, options, ctx, property, result);
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance value is at least of a certain length, when the instance value is a string.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.minProperties = function validateMinProperties (instance, schema, options, ctx) {
-  if (!this.types.object(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var keys = Object.keys(instance);
-  if (!(keys.length >= schema.minProperties)) {
-    result.addError({
-      name: 'minProperties',
-      argument: schema.minProperties,
-      message: "does not meet minimum property length of " + schema.minProperties,
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance value is at most of a certain length, when the instance value is a string.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.maxProperties = function validateMaxProperties (instance, schema, options, ctx) {
-  if (!this.types.object(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var keys = Object.keys(instance);
-  if (!(keys.length <= schema.maxProperties)) {
-    result.addError({
-      name: 'maxProperties',
-      argument: schema.maxProperties,
-      message: "does not meet maximum property length of " + schema.maxProperties,
-    });
-  }
-  return result;
-};
-
-/**
- * Validates items when instance is an array
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null|ValidatorResult}
- */
-validators.items = function validateItems (instance, schema, options, ctx) {
-  var self = this;
-  if (!this.types.array(instance)) return;
-  if (schema.items===undefined) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  instance.every(function (value, i) {
-    if(Array.isArray(schema.items)){
-      var items =  schema.items[i]===undefined ? schema.additionalItems : schema.items[i];
-    }else{
-      var items = schema.items;
-    }
-    if (items === undefined) {
-      return true;
-    }
-    if (items === false) {
-      result.addError({
-        name: 'items',
-        message: "additionalItems not permitted",
-      });
-      return false;
-    }
-    var res = self.validateSchema(value, items, options, ctx.makeChild(items, i));
-    if(res.instance !== result.instance[i]) result.instance[i] = res.instance;
-    result.importErrors(res);
-    return true;
-  });
-  return result;
-};
-
-/**
- * Validates the "contains" keyword
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {String|null|ValidatorResult}
- */
-validators.contains = function validateContains (instance, schema, options, ctx) {
-  var self = this;
-  if (!this.types.array(instance)) return;
-  if (schema.contains===undefined) return;
-  if (!helpers.isSchema(schema.contains)) throw new Error('Expected "contains" keyword to be a schema');
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var count = instance.some(function (value, i) {
-    var res = self.validateSchema(value, schema.contains, options, ctx.makeChild(schema.contains, i));
-    return res.errors.length===0;
-  });
-  if(count===false){
-    result.addError({
-      name: 'contains',
-      argument: schema.contains,
-      message: "must contain an item matching given schema",
-    });
-  }
-  return result;
-};
-
-/**
- * Validates minimum and exclusiveMinimum when the type of the instance value is a number.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.minimum = function validateMinimum (instance, schema, options, ctx) {
-  if (!this.types.number(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (schema.exclusiveMinimum && schema.exclusiveMinimum === true) {
-    if(!(instance > schema.minimum)){
-      result.addError({
-        name: 'minimum',
-        argument: schema.minimum,
-        message: "must be greater than " + schema.minimum,
-      });
-    }
-  } else {
-    if(!(instance >= schema.minimum)){
-      result.addError({
-        name: 'minimum',
-        argument: schema.minimum,
-        message: "must be greater than or equal to " + schema.minimum,
-      });
-    }
-  }
-  return result;
-};
-
-/**
- * Validates maximum and exclusiveMaximum when the type of the instance value is a number.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.maximum = function validateMaximum (instance, schema, options, ctx) {
-  if (!this.types.number(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (schema.exclusiveMaximum && schema.exclusiveMaximum === true) {
-    if(!(instance < schema.maximum)){
-      result.addError({
-        name: 'maximum',
-        argument: schema.maximum,
-        message: "must be less than " + schema.maximum,
-      });
-    }
-  } else {
-    if(!(instance <= schema.maximum)){
-      result.addError({
-        name: 'maximum',
-        argument: schema.maximum,
-        message: "must be less than or equal to " + schema.maximum,
-      });
-    }
-  }
-  return result;
-};
-
-/**
- * Validates the number form of exclusiveMinimum when the type of the instance value is a number.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.exclusiveMinimum = function validateExclusiveMinimum (instance, schema, options, ctx) {
-  // Support the boolean form of exclusiveMinimum, which is handled by the "minimum" keyword.
-  if(typeof schema.exclusiveMinimum === 'boolean') return;
-  if (!this.types.number(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var valid = instance > schema.exclusiveMinimum;
-  if (!valid) {
-    result.addError({
-      name: 'exclusiveMinimum',
-      argument: schema.exclusiveMinimum,
-      message: "must be strictly greater than " + schema.exclusiveMinimum,
-    });
-  }
-  return result;
-};
-
-/**
- * Validates the number form of exclusiveMaximum when the type of the instance value is a number.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.exclusiveMaximum = function validateExclusiveMaximum (instance, schema, options, ctx) {
-  // Support the boolean form of exclusiveMaximum, which is handled by the "maximum" keyword.
-  if(typeof schema.exclusiveMaximum === 'boolean') return;
-  if (!this.types.number(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var valid = instance < schema.exclusiveMaximum;
-  if (!valid) {
-    result.addError({
-      name: 'exclusiveMaximum',
-      argument: schema.exclusiveMaximum,
-      message: "must be strictly less than " + schema.exclusiveMaximum,
-    });
-  }
-  return result;
-};
-
-/**
- * Perform validation for multipleOf and divisibleBy, which are essentially the same.
- * @param instance
- * @param schema
- * @param validationType
- * @param errorMessage
- * @returns {String|null}
- */
-var validateMultipleOfOrDivisbleBy = function validateMultipleOfOrDivisbleBy (instance, schema, options, ctx, validationType, errorMessage) {
-  if (!this.types.number(instance)) return;
-
-  var validationArgument = schema[validationType];
-  if (validationArgument == 0) {
-    throw new SchemaError(validationType + " cannot be zero");
-  }
-
-  var result = new ValidatorResult(instance, schema, options, ctx);
-
-  var instanceDecimals = helpers.getDecimalPlaces(instance);
-  var divisorDecimals = helpers.getDecimalPlaces(validationArgument);
-
-  var maxDecimals = Math.max(instanceDecimals , divisorDecimals);
-  var multiplier = Math.pow(10, maxDecimals);
-
-  if (Math.round(instance * multiplier) % Math.round(validationArgument * multiplier) !== 0) {
-    result.addError({
-      name: validationType,
-      argument:  validationArgument,
-      message: errorMessage + JSON.stringify(validationArgument),
-    });
-  }
-
-  return result;
-};
-
-/**
- * Validates divisibleBy when the type of the instance value is a number.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.multipleOf = function validateMultipleOf (instance, schema, options, ctx) {
-  return validateMultipleOfOrDivisbleBy.call(this, instance, schema, options, ctx, "multipleOf", "is not a multiple of (divisible by) ");
-};
-
-/**
- * Validates multipleOf when the type of the instance value is a number.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.divisibleBy = function validateDivisibleBy (instance, schema, options, ctx) {
-  return validateMultipleOfOrDivisbleBy.call(this, instance, schema, options, ctx, "divisibleBy", "is not divisible by (multiple of) ");
-};
-
-/**
- * Validates whether the instance value is present.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.required = function validateRequired (instance, schema, options, ctx) {
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (instance === undefined && schema.required === true) {
-    // A boolean form is implemented for reverse-compatibility with schemas written against older drafts
-    result.addError({
-      name: 'required',
-      message: "is required",
-    });
-  } else if (this.types.object(instance) && Array.isArray(schema.required)) {
-    schema.required.forEach(function(n){
-      if(getEnumerableProperty(instance, n)===undefined){
-        result.addError({
-          name: 'required',
-          argument: n,
-          message: "requires property " + JSON.stringify(n),
-        });
-      }
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance value matches the regular expression, when the instance value is a string.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.pattern = function validatePattern (instance, schema, options, ctx) {
-  if (!this.types.string(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var pattern = schema.pattern;
-  try {
-    var regexp = new RegExp(pattern, 'u');
-  } catch(_e) {
-    // In the event the stricter handling causes an error, fall back on the forgiving handling
-    // DEPRECATED
-    regexp = new RegExp(pattern);
-  }
-  if (!instance.match(regexp)) {
-    result.addError({
-      name: 'pattern',
-      argument: schema.pattern,
-      message: "does not match pattern " + JSON.stringify(schema.pattern.toString()),
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance value is of a certain defined format or a custom
- * format.
- * The following formats are supported for string types:
- *   - date-time
- *   - date
- *   - time
- *   - ip-address
- *   - ipv6
- *   - uri
- *   - color
- *   - host-name
- *   - alpha
- *   - alpha-numeric
- *   - utc-millisec
- * @param instance
- * @param schema
- * @param [options]
- * @param [ctx]
- * @return {String|null}
- */
-validators.format = function validateFormat (instance, schema, options, ctx) {
-  if (instance===undefined) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (!result.disableFormat && !helpers.isFormat(instance, schema.format, this)) {
-    result.addError({
-      name: 'format',
-      argument: schema.format,
-      message: "does not conform to the " + JSON.stringify(schema.format) + " format",
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance value is at least of a certain length, when the instance value is a string.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.minLength = function validateMinLength (instance, schema, options, ctx) {
-  if (!this.types.string(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var hsp = instance.match(/[\uDC00-\uDFFF]/g);
-  var length = instance.length - (hsp ? hsp.length : 0);
-  if (!(length >= schema.minLength)) {
-    result.addError({
-      name: 'minLength',
-      argument: schema.minLength,
-      message: "does not meet minimum length of " + schema.minLength,
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance value is at most of a certain length, when the instance value is a string.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.maxLength = function validateMaxLength (instance, schema, options, ctx) {
-  if (!this.types.string(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  // TODO if this was already computed in "minLength", use that value instead of re-computing
-  var hsp = instance.match(/[\uDC00-\uDFFF]/g);
-  var length = instance.length - (hsp ? hsp.length : 0);
-  if (!(length <= schema.maxLength)) {
-    result.addError({
-      name: 'maxLength',
-      argument: schema.maxLength,
-      message: "does not meet maximum length of " + schema.maxLength,
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether instance contains at least a minimum number of items, when the instance is an Array.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.minItems = function validateMinItems (instance, schema, options, ctx) {
-  if (!this.types.array(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (!(instance.length >= schema.minItems)) {
-    result.addError({
-      name: 'minItems',
-      argument: schema.minItems,
-      message: "does not meet minimum length of " + schema.minItems,
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether instance contains no more than a maximum number of items, when the instance is an Array.
- * @param instance
- * @param schema
- * @return {String|null}
- */
-validators.maxItems = function validateMaxItems (instance, schema, options, ctx) {
-  if (!this.types.array(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (!(instance.length <= schema.maxItems)) {
-    result.addError({
-      name: 'maxItems',
-      argument: schema.maxItems,
-      message: "does not meet maximum length of " + schema.maxItems,
-    });
-  }
-  return result;
-};
-
-/**
- * Deep compares arrays for duplicates
- * @param v
- * @param i
- * @param a
- * @private
- * @return {boolean}
- */
-function testArrays (v, i, a) {
-  var j, len = a.length;
-  for (j = i + 1, len; j < len; j++) {
-    if (helpers.deepCompareStrict(v, a[j])) {
-      return false;
-    }
-  }
-  return true;
-}
-
-/**
- * Validates whether there are no duplicates, when the instance is an Array.
- * @param instance
- * @return {String|null}
- */
-validators.uniqueItems = function validateUniqueItems (instance, schema, options, ctx) {
-  if (schema.uniqueItems!==true) return;
-  if (!this.types.array(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (!instance.every(testArrays)) {
-    result.addError({
-      name: 'uniqueItems',
-      message: "contains duplicate item",
-    });
-  }
-  return result;
-};
-
-/**
- * Validate for the presence of dependency properties, if the instance is an object.
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {null|ValidatorResult}
- */
-validators.dependencies = function validateDependencies (instance, schema, options, ctx) {
-  if (!this.types.object(instance)) return;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  for (var property in schema.dependencies) {
-    if (instance[property] === undefined) {
-      continue;
-    }
-    var dep = schema.dependencies[property];
-    var childContext = ctx.makeChild(dep, property);
-    if (typeof dep == 'string') {
-      dep = [dep];
-    }
-    if (Array.isArray(dep)) {
-      dep.forEach(function (prop) {
-        if (instance[prop] === undefined) {
-          result.addError({
-            // FIXME there's two different "dependencies" errors here with slightly different outputs
-            // Can we make these the same? Or should we create different error types?
-            name: 'dependencies',
-            argument: childContext.propertyPath,
-            message: "property " + prop + " not found, required by " + childContext.propertyPath,
-          });
-        }
-      });
-    } else {
-      var res = this.validateSchema(instance, dep, options, childContext);
-      if(result.instance !== res.instance) result.instance = res.instance;
-      if (res && res.errors.length) {
-        result.addError({
-          name: 'dependencies',
-          argument: childContext.propertyPath,
-          message: "does not meet dependency required by " + childContext.propertyPath,
-        });
-        result.importErrors(res);
-      }
-    }
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance value is one of the enumerated values.
- *
- * @param instance
- * @param schema
- * @return {ValidatorResult|null}
- */
-validators['enum'] = function validateEnum (instance, schema, options, ctx) {
-  if (instance === undefined) {
-    return null;
-  }
-  if (!Array.isArray(schema['enum'])) {
-    throw new SchemaError("enum expects an array", schema);
-  }
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (!schema['enum'].some(helpers.deepCompareStrict.bind(null, instance))) {
-    result.addError({
-      name: 'enum',
-      argument: schema['enum'],
-      message: "is not one of enum values: " + schema['enum'].map(String).join(','),
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance exactly matches a given value
- *
- * @param instance
- * @param schema
- * @return {ValidatorResult|null}
- */
-validators['const'] = function validateEnum (instance, schema, options, ctx) {
-  if (instance === undefined) {
-    return null;
-  }
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  if (!helpers.deepCompareStrict(schema['const'], instance)) {
-    result.addError({
-      name: 'const',
-      argument: schema['const'],
-      message: "does not exactly match expected constant: " + schema['const'],
-    });
-  }
-  return result;
-};
-
-/**
- * Validates whether the instance if of a prohibited type.
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @return {null|ValidatorResult}
- */
-validators.not = validators.disallow = function validateNot (instance, schema, options, ctx) {
-  var self = this;
-  if(instance===undefined) return null;
-  var result = new ValidatorResult(instance, schema, options, ctx);
-  var notTypes = schema.not || schema.disallow;
-  if(!notTypes) return null;
-  if(!Array.isArray(notTypes)) notTypes=[notTypes];
-  notTypes.forEach(function (type) {
-    if (self.testType(instance, schema, options, ctx, type)) {
-      var id = type && (type.$id || type.id);
-      var schemaId = id || type;
-      result.addError({
-        name: 'not',
-        argument: schemaId,
-        message: "is of prohibited type " + schemaId,
-      });
-    }
-  });
-  return result;
-};
-
-module.exports = attribute;
-
-
-/***/ }),
-
-/***/ 4801:
-/***/ ((module, exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var uri = __nccwpck_require__(7310);
-
-var ValidationError = exports.ValidationError = function ValidationError (message, instance, schema, path, name, argument) {
-  if(Array.isArray(path)){
-    this.path = path;
-    this.property = path.reduce(function(sum, item){
-      return sum + makeSuffix(item);
-    }, 'instance');
-  }else if(path !== undefined){
-    this.property = path;
-  }
-  if (message) {
-    this.message = message;
-  }
-  if (schema) {
-    var id = schema.$id || schema.id;
-    this.schema = id || schema;
-  }
-  if (instance !== undefined) {
-    this.instance = instance;
-  }
-  this.name = name;
-  this.argument = argument;
-  this.stack = this.toString();
-};
-
-ValidationError.prototype.toString = function toString() {
-  return this.property + ' ' + this.message;
-};
-
-var ValidatorResult = exports.ValidatorResult = function ValidatorResult(instance, schema, options, ctx) {
-  this.instance = instance;
-  this.schema = schema;
-  this.options = options;
-  this.path = ctx.path;
-  this.propertyPath = ctx.propertyPath;
-  this.errors = [];
-  this.throwError = options && options.throwError;
-  this.throwFirst = options && options.throwFirst;
-  this.throwAll = options && options.throwAll;
-  this.disableFormat = options && options.disableFormat === true;
-};
-
-ValidatorResult.prototype.addError = function addError(detail) {
-  var err;
-  if (typeof detail == 'string') {
-    err = new ValidationError(detail, this.instance, this.schema, this.path);
-  } else {
-    if (!detail) throw new Error('Missing error detail');
-    if (!detail.message) throw new Error('Missing error message');
-    if (!detail.name) throw new Error('Missing validator type');
-    err = new ValidationError(detail.message, this.instance, this.schema, this.path, detail.name, detail.argument);
-  }
-
-  this.errors.push(err);
-  if (this.throwFirst) {
-    throw new ValidatorResultError(this);
-  }else if(this.throwError){
-    throw err;
-  }
-  return err;
-};
-
-ValidatorResult.prototype.importErrors = function importErrors(res) {
-  if (typeof res == 'string' || (res && res.validatorType)) {
-    this.addError(res);
-  } else if (res && res.errors) {
-    this.errors = this.errors.concat(res.errors);
-  }
-};
-
-function stringizer (v,i){
-  return i+': '+v.toString()+'\n';
-}
-ValidatorResult.prototype.toString = function toString(res) {
-  return this.errors.map(stringizer).join('');
-};
-
-Object.defineProperty(ValidatorResult.prototype, "valid", { get: function() {
-  return !this.errors.length;
-} });
-
-module.exports.ValidatorResultError = ValidatorResultError;
-function ValidatorResultError(result) {
-  if(Error.captureStackTrace){
-    Error.captureStackTrace(this, ValidatorResultError);
-  }
-  this.instance = result.instance;
-  this.schema = result.schema;
-  this.options = result.options;
-  this.errors = result.errors;
-}
-ValidatorResultError.prototype = new Error();
-ValidatorResultError.prototype.constructor = ValidatorResultError;
-ValidatorResultError.prototype.name = "Validation Error";
-
-/**
- * Describes a problem with a Schema which prevents validation of an instance
- * @name SchemaError
- * @constructor
- */
-var SchemaError = exports.SchemaError = function SchemaError (msg, schema) {
-  this.message = msg;
-  this.schema = schema;
-  Error.call(this, msg);
-  Error.captureStackTrace(this, SchemaError);
-};
-SchemaError.prototype = Object.create(Error.prototype,
-  {
-    constructor: {value: SchemaError, enumerable: false},
-    name: {value: 'SchemaError', enumerable: false},
-  });
-
-var SchemaContext = exports.SchemaContext = function SchemaContext (schema, options, path, base, schemas) {
-  this.schema = schema;
-  this.options = options;
-  if(Array.isArray(path)){
-    this.path = path;
-    this.propertyPath = path.reduce(function(sum, item){
-      return sum + makeSuffix(item);
-    }, 'instance');
-  }else{
-    this.propertyPath = path;
-  }
-  this.base = base;
-  this.schemas = schemas;
-};
-
-SchemaContext.prototype.resolve = function resolve (target) {
-  return uri.resolve(this.base, target);
-};
-
-SchemaContext.prototype.makeChild = function makeChild(schema, propertyName){
-  var path = (propertyName===undefined) ? this.path : this.path.concat([propertyName]);
-  var id = schema.$id || schema.id;
-  var base = uri.resolve(this.base, id||'');
-  var ctx = new SchemaContext(schema, this.options, path, base, Object.create(this.schemas));
-  if(id && !ctx.schemas[base]){
-    ctx.schemas[base] = schema;
-  }
-  return ctx;
-};
-
-var FORMAT_REGEXPS = exports.FORMAT_REGEXPS = {
-  // 7.3.1. Dates, Times, and Duration
-  'date-time': /^\d{4}-(?:0[0-9]{1}|1[0-2]{1})-(3[01]|0[1-9]|[12][0-9])[tT ](2[0-4]|[01][0-9]):([0-5][0-9]):(60|[0-5][0-9])(\.\d+)?([zZ]|[+-]([0-5][0-9]):(60|[0-5][0-9]))$/,
-  'date': /^\d{4}-(?:0[0-9]{1}|1[0-2]{1})-(3[01]|0[1-9]|[12][0-9])$/,
-  'time': /^(2[0-4]|[01][0-9]):([0-5][0-9]):(60|[0-5][0-9])$/,
-  'duration': /P(T\d+(H(\d+M(\d+S)?)?|M(\d+S)?|S)|\d+(D|M(\d+D)?|Y(\d+M(\d+D)?)?)(T\d+(H(\d+M(\d+S)?)?|M(\d+S)?|S))?|\d+W)/i,
-
-  // 7.3.2. Email Addresses
-  // TODO: fix the email production
-  'email': /^(?:[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+\.)*[\w\!\#\$\%\&\'\*\+\-\/\=\?\^\`\{\|\}\~]+@(?:(?:(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!\.)){0,61}[a-zA-Z0-9]?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9\-](?!$)){0,61}[a-zA-Z0-9]?)|(?:\[(?:(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\.){3}(?:[01]?\d{1,2}|2[0-4]\d|25[0-5])\]))$/,
-  'idn-email': /^("(?:[!#-\[\]-\u{10FFFF}]|\\[\t -\u{10FFFF}])*"|[!#-'*+\-/-9=?A-Z\^-\u{10FFFF}](?:\.?[!#-'*+\-/-9=?A-Z\^-\u{10FFFF}])*)@([!#-'*+\-/-9=?A-Z\^-\u{10FFFF}](?:\.?[!#-'*+\-/-9=?A-Z\^-\u{10FFFF}])*|\[[!-Z\^-\u{10FFFF}]*\])$/u,
-
-  // 7.3.3. Hostnames
-
-  // 7.3.4. IP Addresses
-  'ip-address': /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/,
-  // FIXME whitespace is invalid
-  'ipv6': /^\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}))|:)))(%.+)?\s*$/,
-
-  // 7.3.5. Resource Identifiers
-  // TODO: A more accurate regular expression for "uri" goes:
-  // [A-Za-z][+\-.0-9A-Za-z]*:((/(/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?)?)?#(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*|(/(/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?[/?]|[!$&-.0-;=?-Z_a-z~])|/?%[0-9A-Fa-f]{2}|[!$&-.0-;=?-Z_a-z~])(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*(#(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*)?|/(/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~])+(:\d*)?|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?:\d*|\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?)?)?
-  'uri': /^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s]*$/,
-  'uri-reference': /^(((([A-Za-z][+\-.0-9A-Za-z]*(:%[0-9A-Fa-f]{2}|:[!$&-.0-;=?-Z_a-z~]|[/?])|\?)(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*|([A-Za-z][+\-.0-9A-Za-z]*:?)?)|([A-Za-z][+\-.0-9A-Za-z]*:)?\/((%[0-9A-Fa-f]{2}|\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?[/?]|[!$&-.0-;=?-Z_a-z~])(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*|(\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?)?))#(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*|(([A-Za-z][+\-.0-9A-Za-z]*)?%[0-9A-Fa-f]{2}|[!$&-.0-9;=@_~]|[A-Za-z][+\-.0-9A-Za-z]*[!$&-*,;=@_~])(%[0-9A-Fa-f]{2}|[!$&-.0-9;=@-Z_a-z~])*((([/?](%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*)?#|[/?])(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*)?|([A-Za-z][+\-.0-9A-Za-z]*(:%[0-9A-Fa-f]{2}|:[!$&-.0-;=?-Z_a-z~]|[/?])|\?)(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*|([A-Za-z][+\-.0-9A-Za-z]*:)?\/((%[0-9A-Fa-f]{2}|\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?[/?]|[!$&-.0-;=?-Z_a-z~])(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~])*|\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~])+(:\d*)?|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?:\d*|\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~]+)?|[.0-:A-Fa-f]+)\])?)?|[A-Za-z][+\-.0-9A-Za-z]*:?)?$/,
-  'iri': /^[a-zA-Z][a-zA-Z0-9+.-]*:[^\s]*$/,
-  'iri-reference': /^(((([A-Za-z][+\-.0-9A-Za-z]*(:%[0-9A-Fa-f]{2}|:[!$&-.0-;=?-Z_a-z~-\u{10FFFF}]|[/?])|\?)(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~-\u{10FFFF}])*|([A-Za-z][+\-.0-9A-Za-z]*:?)?)|([A-Za-z][+\-.0-9A-Za-z]*:)?\/((%[0-9A-Fa-f]{2}|\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~-\u{10FFFF}])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~-\u{10FFFF}]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?[/?]|[!$&-.0-;=?-Z_a-z~-\u{10FFFF}])(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~-\u{10FFFF}])*|(\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~-\u{10FFFF}])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~-\u{10FFFF}]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?)?))#(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~-\u{10FFFF}])*|(([A-Za-z][+\-.0-9A-Za-z]*)?%[0-9A-Fa-f]{2}|[!$&-.0-9;=@_~-\u{10FFFF}]|[A-Za-z][+\-.0-9A-Za-z]*[!$&-*,;=@_~-\u{10FFFF}])(%[0-9A-Fa-f]{2}|[!$&-.0-9;=@-Z_a-z~-\u{10FFFF}])*((([/?](%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~-\u{10FFFF}])*)?#|[/?])(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~-\u{10FFFF}])*)?|([A-Za-z][+\-.0-9A-Za-z]*(:%[0-9A-Fa-f]{2}|:[!$&-.0-;=?-Z_a-z~-\u{10FFFF}]|[/?])|\?)(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~-\u{10FFFF}])*|([A-Za-z][+\-.0-9A-Za-z]*:)?\/((%[0-9A-Fa-f]{2}|\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~-\u{10FFFF}])+|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~-\u{10FFFF}]+)?|[.0-:A-Fa-f]+)\])?)(:\d*)?[/?]|[!$&-.0-;=?-Z_a-z~-\u{10FFFF}])(%[0-9A-Fa-f]{2}|[!$&-;=?-Z_a-z~-\u{10FFFF}])*|\/((%[0-9A-Fa-f]{2}|[!$&-.0-9;=A-Z_a-z~-\u{10FFFF}])+(:\d*)?|(\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~-\u{10FFFF}]+)?|[.0-:A-Fa-f]+)\])?:\d*|\[(([Vv][0-9A-Fa-f]+\.[!$&-.0-;=A-Z_a-z~-\u{10FFFF}]+)?|[.0-:A-Fa-f]+)\])?)?|[A-Za-z][+\-.0-9A-Za-z]*:?)?$/u,
-  'uuid': /^[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}$/i,
-
-  // 7.3.6. uri-template
-  'uri-template': /(%[0-9a-f]{2}|[!#$&(-;=?@\[\]_a-z~]|\{[!#&+,./;=?@|]?(%[0-9a-f]{2}|[0-9_a-z])(\.?(%[0-9a-f]{2}|[0-9_a-z]))*(:[1-9]\d{0,3}|\*)?(,(%[0-9a-f]{2}|[0-9_a-z])(\.?(%[0-9a-f]{2}|[0-9_a-z]))*(:[1-9]\d{0,3}|\*)?)*\})*/iu,
-
-  // 7.3.7. JSON Pointers
-  'json-pointer': /^(\/([\x00-\x2e0-@\[-}\x7f]|~[01])*)*$/iu,
-  'relative-json-pointer': /^\d+(#|(\/([\x00-\x2e0-@\[-}\x7f]|~[01])*)*)$/iu,
-
-  // hostname regex from: http://stackoverflow.com/a/1420225/5628
-  'hostname': /^(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\.?$/,
-  'host-name': /^(?=.{1,255}$)[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?(?:\.[0-9A-Za-z](?:(?:[0-9A-Za-z]|-){0,61}[0-9A-Za-z])?)*\.?$/,
-
-  'utc-millisec': function (input) {
-    return (typeof input === 'string') && parseFloat(input) === parseInt(input, 10) && !isNaN(input);
-  },
-
-  // 7.3.8. regex
-  'regex': function (input) {
-    var result = true;
-    try {
-      new RegExp(input);
-    } catch (e) {
-      result = false;
-    }
-    return result;
-  },
-
-  // Other definitions
-  // "style" was removed from JSON Schema in draft-4 and is deprecated
-  'style': /[\r\n\t ]*[^\r\n\t ][^:]*:[\r\n\t ]*[^\r\n\t ;]*[\r\n\t ]*;?/,
-  // "color" was removed from JSON Schema in draft-4 and is deprecated
-  'color': /^(#?([0-9A-Fa-f]{3}){1,2}\b|aqua|black|blue|fuchsia|gray|green|lime|maroon|navy|olive|orange|purple|red|silver|teal|white|yellow|(rgb\(\s*\b([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\b\s*,\s*\b([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\b\s*,\s*\b([0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-4][0-9]|25[0-5])\b\s*\))|(rgb\(\s*(\d?\d%|100%)+\s*,\s*(\d?\d%|100%)+\s*,\s*(\d?\d%|100%)+\s*\)))$/,
-  'phone': /^\+(?:[0-9] ?){6,14}[0-9]$/,
-  'alpha': /^[a-zA-Z]+$/,
-  'alphanumeric': /^[a-zA-Z0-9]+$/,
-};
-
-FORMAT_REGEXPS.regexp = FORMAT_REGEXPS.regex;
-FORMAT_REGEXPS.pattern = FORMAT_REGEXPS.regex;
-FORMAT_REGEXPS.ipv4 = FORMAT_REGEXPS['ip-address'];
-
-exports.isFormat = function isFormat (input, format, validator) {
-  if (typeof input === 'string' && FORMAT_REGEXPS[format] !== undefined) {
-    if (FORMAT_REGEXPS[format] instanceof RegExp) {
-      return FORMAT_REGEXPS[format].test(input);
-    }
-    if (typeof FORMAT_REGEXPS[format] === 'function') {
-      return FORMAT_REGEXPS[format](input);
-    }
-  } else if (validator && validator.customFormats &&
-      typeof validator.customFormats[format] === 'function') {
-    return validator.customFormats[format](input);
-  }
-  return true;
-};
-
-var makeSuffix = exports.makeSuffix = function makeSuffix (key) {
-  key = key.toString();
-  // This function could be capable of outputting valid a ECMAScript string, but the
-  // resulting code for testing which form to use would be tens of thousands of characters long
-  // That means this will use the name form for some illegal forms
-  if (!key.match(/[.\s\[\]]/) && !key.match(/^[\d]/)) {
-    return '.' + key;
-  }
-  if (key.match(/^\d+$/)) {
-    return '[' + key + ']';
-  }
-  return '[' + JSON.stringify(key) + ']';
-};
-
-exports.deepCompareStrict = function deepCompareStrict (a, b) {
-  if (typeof a !== typeof b) {
-    return false;
-  }
-  if (Array.isArray(a)) {
-    if (!Array.isArray(b)) {
-      return false;
-    }
-    if (a.length !== b.length) {
-      return false;
-    }
-    return a.every(function (v, i) {
-      return deepCompareStrict(a[i], b[i]);
-    });
-  }
-  if (typeof a === 'object') {
-    if (!a || !b) {
-      return a === b;
-    }
-    var aKeys = Object.keys(a);
-    var bKeys = Object.keys(b);
-    if (aKeys.length !== bKeys.length) {
-      return false;
-    }
-    return aKeys.every(function (v) {
-      return deepCompareStrict(a[v], b[v]);
-    });
-  }
-  return a === b;
-};
-
-function deepMerger (target, dst, e, i) {
-  if (typeof e === 'object') {
-    dst[i] = deepMerge(target[i], e);
-  } else {
-    if (target.indexOf(e) === -1) {
-      dst.push(e);
-    }
-  }
-}
-
-function copyist (src, dst, key) {
-  dst[key] = src[key];
-}
-
-function copyistWithDeepMerge (target, src, dst, key) {
-  if (typeof src[key] !== 'object' || !src[key]) {
-    dst[key] = src[key];
-  }
-  else {
-    if (!target[key]) {
-      dst[key] = src[key];
-    } else {
-      dst[key] = deepMerge(target[key], src[key]);
-    }
-  }
-}
-
-function deepMerge (target, src) {
-  var array = Array.isArray(src);
-  var dst = array && [] || {};
-
-  if (array) {
-    target = target || [];
-    dst = dst.concat(target);
-    src.forEach(deepMerger.bind(null, target, dst));
-  } else {
-    if (target && typeof target === 'object') {
-      Object.keys(target).forEach(copyist.bind(null, target, dst));
-    }
-    Object.keys(src).forEach(copyistWithDeepMerge.bind(null, target, src, dst));
-  }
-
-  return dst;
-}
-
-module.exports.deepMerge = deepMerge;
-
-/**
- * Validates instance against the provided schema
- * Implements URI+JSON Pointer encoding, e.g. "%7e"="~0"=>"~", "~1"="%2f"=>"/"
- * @param o
- * @param s The path to walk o along
- * @return any
- */
-exports.objectGetPath = function objectGetPath(o, s) {
-  var parts = s.split('/').slice(1);
-  var k;
-  while (typeof (k=parts.shift()) == 'string') {
-    var n = decodeURIComponent(k.replace(/~0/,'~').replace(/~1/g,'/'));
-    if (!(n in o)) return;
-    o = o[n];
-  }
-  return o;
-};
-
-function pathEncoder (v) {
-  return '/'+encodeURIComponent(v).replace(/~/g,'%7E');
-}
-/**
- * Accept an Array of property names and return a JSON Pointer URI fragment
- * @param Array a
- * @return {String}
- */
-exports.encodePath = function encodePointer(a){
-  // ~ must be encoded explicitly because hacks
-  // the slash is encoded by encodeURIComponent
-  return a.map(pathEncoder).join('');
-};
-
-
-/**
- * Calculate the number of decimal places a number uses
- * We need this to get correct results out of multipleOf and divisibleBy
- * when either figure is has decimal places, due to IEEE-754 float issues.
- * @param number
- * @returns {number}
- */
-exports.getDecimalPlaces = function getDecimalPlaces(number) {
-
-  var decimalPlaces = 0;
-  if (isNaN(number)) return decimalPlaces;
-
-  if (typeof number !== 'number') {
-    number = Number(number);
-  }
-
-  var parts = number.toString().split('e');
-  if (parts.length === 2) {
-    if (parts[1][0] !== '-') {
-      return decimalPlaces;
-    } else {
-      decimalPlaces = Number(parts[1].slice(1));
-    }
-  }
-
-  var decimalParts = parts[0].split('.');
-  if (decimalParts.length === 2) {
-    decimalPlaces += decimalParts[1].length;
-  }
-
-  return decimalPlaces;
-};
-
-exports.isSchema = function isSchema(val){
-  return (typeof val === 'object' && val) || (typeof val === 'boolean');
-};
-
-
-
-/***/ }),
-
-/***/ 3978:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var Validator = module.exports.Validator = __nccwpck_require__(8669);
-
-module.exports.ValidatorResult = __nccwpck_require__(4801).ValidatorResult;
-module.exports.ValidatorResultError = __nccwpck_require__(4801).ValidatorResultError;
-module.exports.ValidationError = __nccwpck_require__(4801).ValidationError;
-module.exports.SchemaError = __nccwpck_require__(4801).SchemaError;
-module.exports.SchemaScanResult = __nccwpck_require__(9534).SchemaScanResult;
-module.exports.scan = __nccwpck_require__(9534).scan;
-
-module.exports.validate = function (instance, schema, options) {
-  var v = new Validator();
-  return v.validate(instance, schema, options);
-};
-
-
-/***/ }),
-
-/***/ 9534:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var urilib = __nccwpck_require__(7310);
-var helpers = __nccwpck_require__(4801);
-
-module.exports.SchemaScanResult = SchemaScanResult;
-function SchemaScanResult(found, ref){
-  this.id = found;
-  this.ref = ref;
-}
-
-/**
- * Adds a schema with a certain urn to the Validator instance.
- * @param string uri
- * @param object schema
- * @return {Object}
- */
-module.exports.scan = function scan(base, schema){
-  function scanSchema(baseuri, schema){
-    if(!schema || typeof schema!='object') return;
-    // Mark all referenced schemas so we can tell later which schemas are referred to, but never defined
-    if(schema.$ref){
-      var resolvedUri = urilib.resolve(baseuri, schema.$ref);
-      ref[resolvedUri] = ref[resolvedUri] ? ref[resolvedUri]+1 : 0;
-      return;
-    }
-    var id = schema.$id || schema.id;
-    var ourBase = id ? urilib.resolve(baseuri, id) : baseuri;
-    if (ourBase) {
-      // If there's no fragment, append an empty one
-      if(ourBase.indexOf('#')<0) ourBase += '#';
-      if(found[ourBase]){
-        if(!helpers.deepCompareStrict(found[ourBase], schema)){
-          throw new Error('Schema <'+ourBase+'> already exists with different definition');
-        }
-        return found[ourBase];
-      }
-      found[ourBase] = schema;
-      // strip trailing fragment
-      if(ourBase[ourBase.length-1]=='#'){
-        found[ourBase.substring(0, ourBase.length-1)] = schema;
-      }
-    }
-    scanArray(ourBase+'/items', (Array.isArray(schema.items)?schema.items:[schema.items]));
-    scanArray(ourBase+'/extends', (Array.isArray(schema.extends)?schema.extends:[schema.extends]));
-    scanSchema(ourBase+'/additionalItems', schema.additionalItems);
-    scanObject(ourBase+'/properties', schema.properties);
-    scanSchema(ourBase+'/additionalProperties', schema.additionalProperties);
-    scanObject(ourBase+'/definitions', schema.definitions);
-    scanObject(ourBase+'/patternProperties', schema.patternProperties);
-    scanObject(ourBase+'/dependencies', schema.dependencies);
-    scanArray(ourBase+'/disallow', schema.disallow);
-    scanArray(ourBase+'/allOf', schema.allOf);
-    scanArray(ourBase+'/anyOf', schema.anyOf);
-    scanArray(ourBase+'/oneOf', schema.oneOf);
-    scanSchema(ourBase+'/not', schema.not);
-  }
-  function scanArray(baseuri, schemas){
-    if(!Array.isArray(schemas)) return;
-    for(var i=0; i<schemas.length; i++){
-      scanSchema(baseuri+'/'+i, schemas[i]);
-    }
-  }
-  function scanObject(baseuri, schemas){
-    if(!schemas || typeof schemas!='object') return;
-    for(var p in schemas){
-      scanSchema(baseuri+'/'+p, schemas[p]);
-    }
-  }
-
-  var found = {};
-  var ref = {};
-  scanSchema(base, schema);
-  return new SchemaScanResult(found, ref);
-};
-
-
-/***/ }),
-
-/***/ 8669:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var urilib = __nccwpck_require__(7310);
-
-var attribute = __nccwpck_require__(1568);
-var helpers = __nccwpck_require__(4801);
-var scanSchema = (__nccwpck_require__(9534).scan);
-var ValidatorResult = helpers.ValidatorResult;
-var ValidatorResultError = helpers.ValidatorResultError;
-var SchemaError = helpers.SchemaError;
-var SchemaContext = helpers.SchemaContext;
-//var anonymousBase = 'vnd.jsonschema:///';
-var anonymousBase = '/';
-
-/**
- * Creates a new Validator object
- * @name Validator
- * @constructor
- */
-var Validator = function Validator () {
-  // Allow a validator instance to override global custom formats or to have their
-  // own custom formats.
-  this.customFormats = Object.create(Validator.prototype.customFormats);
-  this.schemas = {};
-  this.unresolvedRefs = [];
-
-  // Use Object.create to make this extensible without Validator instances stepping on each other's toes.
-  this.types = Object.create(types);
-  this.attributes = Object.create(attribute.validators);
-};
-
-// Allow formats to be registered globally.
-Validator.prototype.customFormats = {};
-
-// Hint at the presence of a property
-Validator.prototype.schemas = null;
-Validator.prototype.types = null;
-Validator.prototype.attributes = null;
-Validator.prototype.unresolvedRefs = null;
-
-/**
- * Adds a schema with a certain urn to the Validator instance.
- * @param schema
- * @param urn
- * @return {Object}
- */
-Validator.prototype.addSchema = function addSchema (schema, base) {
-  var self = this;
-  if (!schema) {
-    return null;
-  }
-  var scan = scanSchema(base||anonymousBase, schema);
-  var ourUri = base || schema.$id || schema.id;
-  for(var uri in scan.id){
-    this.schemas[uri] = scan.id[uri];
-  }
-  for(var uri in scan.ref){
-    // If this schema is already defined, it will be filtered out by the next step
-    this.unresolvedRefs.push(uri);
-  }
-  // Remove newly defined schemas from unresolvedRefs
-  this.unresolvedRefs = this.unresolvedRefs.filter(function(uri){
-    return typeof self.schemas[uri]==='undefined';
-  });
-  return this.schemas[ourUri];
-};
-
-Validator.prototype.addSubSchemaArray = function addSubSchemaArray(baseuri, schemas) {
-  if(!Array.isArray(schemas)) return;
-  for(var i=0; i<schemas.length; i++){
-    this.addSubSchema(baseuri, schemas[i]);
-  }
-};
-
-Validator.prototype.addSubSchemaObject = function addSubSchemaArray(baseuri, schemas) {
-  if(!schemas || typeof schemas!='object') return;
-  for(var p in schemas){
-    this.addSubSchema(baseuri, schemas[p]);
-  }
-};
-
-
-
-/**
- * Sets all the schemas of the Validator instance.
- * @param schemas
- */
-Validator.prototype.setSchemas = function setSchemas (schemas) {
-  this.schemas = schemas;
-};
-
-/**
- * Returns the schema of a certain urn
- * @param urn
- */
-Validator.prototype.getSchema = function getSchema (urn) {
-  return this.schemas[urn];
-};
-
-/**
- * Validates instance against the provided schema
- * @param instance
- * @param schema
- * @param [options]
- * @param [ctx]
- * @return {Array}
- */
-Validator.prototype.validate = function validate (instance, schema, options, ctx) {
-  if((typeof schema !== 'boolean' && typeof schema !== 'object') || schema === null){
-    throw new SchemaError('Expected `schema` to be an object or boolean');
-  }
-  if (!options) {
-    options = {};
-  }
-  // This section indexes subschemas in the provided schema, so they don't need to be added with Validator#addSchema
-  // This will work so long as the function at uri.resolve() will resolve a relative URI to a relative URI
-  var id = schema.$id || schema.id;
-  var base = urilib.resolve(options.base||anonymousBase, id||'');
-  if(!ctx){
-    ctx = new SchemaContext(schema, options, [], base, Object.create(this.schemas));
-    if (!ctx.schemas[base]) {
-      ctx.schemas[base] = schema;
-    }
-    var found = scanSchema(base, schema);
-    for(var n in found.id){
-      var sch = found.id[n];
-      ctx.schemas[n] = sch;
-    }
-  }
-  if(options.required && instance===undefined){
-    var result = new ValidatorResult(instance, schema, options, ctx);
-    result.addError('is required, but is undefined');
-    return result;
-  }
-  var result = this.validateSchema(instance, schema, options, ctx);
-  if (!result) {
-    throw new Error('Result undefined');
-  }else if(options.throwAll && result.errors.length){
-    throw new ValidatorResultError(result);
-  }
-  return result;
-};
-
-/**
-* @param Object schema
-* @return mixed schema uri or false
-*/
-function shouldResolve(schema) {
-  var ref = (typeof schema === 'string') ? schema : schema.$ref;
-  if (typeof ref=='string') return ref;
-  return false;
-}
-
-/**
- * Validates an instance against the schema (the actual work horse)
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @private
- * @return {ValidatorResult}
- */
-Validator.prototype.validateSchema = function validateSchema (instance, schema, options, ctx) {
-  var result = new ValidatorResult(instance, schema, options, ctx);
-
-  // Support for the true/false schemas
-  if(typeof schema==='boolean') {
-    if(schema===true){
-      // `true` is always valid
-      schema = {};
-    }else if(schema===false){
-      // `false` is always invalid
-      schema = {type: []};
-    }
-  }else if(!schema){
-    // This might be a string
-    throw new Error("schema is undefined");
-  }
-
-  if (schema['extends']) {
-    if (Array.isArray(schema['extends'])) {
-      var schemaobj = {schema: schema, ctx: ctx};
-      schema['extends'].forEach(this.schemaTraverser.bind(this, schemaobj));
-      schema = schemaobj.schema;
-      schemaobj.schema = null;
-      schemaobj.ctx = null;
-      schemaobj = null;
-    } else {
-      schema = helpers.deepMerge(schema, this.superResolve(schema['extends'], ctx));
-    }
-  }
-
-  // If passed a string argument, load that schema URI
-  var switchSchema = shouldResolve(schema);
-  if (switchSchema) {
-    var resolved = this.resolve(schema, switchSchema, ctx);
-    var subctx = new SchemaContext(resolved.subschema, options, ctx.path, resolved.switchSchema, ctx.schemas);
-    return this.validateSchema(instance, resolved.subschema, options, subctx);
-  }
-
-  var skipAttributes = options && options.skipAttributes || [];
-  // Validate each schema attribute against the instance
-  for (var key in schema) {
-    if (!attribute.ignoreProperties[key] && skipAttributes.indexOf(key) < 0) {
-      var validatorErr = null;
-      var validator = this.attributes[key];
-      if (validator) {
-        validatorErr = validator.call(this, instance, schema, options, ctx);
-      } else if (options.allowUnknownAttributes === false) {
-        // This represents an error with the schema itself, not an invalid instance
-        throw new SchemaError("Unsupported attribute: " + key, schema);
-      }
-      if (validatorErr) {
-        result.importErrors(validatorErr);
-      }
-    }
-  }
-
-  if (typeof options.rewrite == 'function') {
-    var value = options.rewrite.call(this, instance, schema, options, ctx);
-    result.instance = value;
-  }
-  return result;
-};
-
-/**
-* @private
-* @param Object schema
-* @param SchemaContext ctx
-* @returns Object schema or resolved schema
-*/
-Validator.prototype.schemaTraverser = function schemaTraverser (schemaobj, s) {
-  schemaobj.schema = helpers.deepMerge(schemaobj.schema, this.superResolve(s, schemaobj.ctx));
-};
-
-/**
-* @private
-* @param Object schema
-* @param SchemaContext ctx
-* @returns Object schema or resolved schema
-*/
-Validator.prototype.superResolve = function superResolve (schema, ctx) {
-  var ref = shouldResolve(schema);
-  if(ref) {
-    return this.resolve(schema, ref, ctx).subschema;
-  }
-  return schema;
-};
-
-/**
-* @private
-* @param Object schema
-* @param Object switchSchema
-* @param SchemaContext ctx
-* @return Object resolved schemas {subschema:String, switchSchema: String}
-* @throws SchemaError
-*/
-Validator.prototype.resolve = function resolve (schema, switchSchema, ctx) {
-  switchSchema = ctx.resolve(switchSchema);
-  // First see if the schema exists under the provided URI
-  if (ctx.schemas[switchSchema]) {
-    return {subschema: ctx.schemas[switchSchema], switchSchema: switchSchema};
-  }
-  // Else try walking the property pointer
-  var parsed = urilib.parse(switchSchema);
-  var fragment = parsed && parsed.hash;
-  var document = fragment && fragment.length && switchSchema.substr(0, switchSchema.length - fragment.length);
-  if (!document || !ctx.schemas[document]) {
-    throw new SchemaError("no such schema <" + switchSchema + ">", schema);
-  }
-  var subschema = helpers.objectGetPath(ctx.schemas[document], fragment.substr(1));
-  if(subschema===undefined){
-    throw new SchemaError("no such schema " + fragment + " located in <" + document + ">", schema);
-  }
-  return {subschema: subschema, switchSchema: switchSchema};
-};
-
-/**
- * Tests whether the instance if of a certain type.
- * @private
- * @param instance
- * @param schema
- * @param options
- * @param ctx
- * @param type
- * @return {boolean}
- */
-Validator.prototype.testType = function validateType (instance, schema, options, ctx, type) {
-  if(type===undefined){
-    return;
-  }else if(type===null){
-    throw new SchemaError('Unexpected null in "type" keyword');
-  }
-  if (typeof this.types[type] == 'function') {
-    return this.types[type].call(this, instance);
-  }
-  if (type && typeof type == 'object') {
-    var res = this.validateSchema(instance, type, options, ctx);
-    return res === undefined || !(res && res.errors.length);
-  }
-  // Undefined or properties not on the list are acceptable, same as not being defined
-  return true;
-};
-
-var types = Validator.prototype.types = {};
-types.string = function testString (instance) {
-  return typeof instance == 'string';
-};
-types.number = function testNumber (instance) {
-  // isFinite returns false for NaN, Infinity, and -Infinity
-  return typeof instance == 'number' && isFinite(instance);
-};
-types.integer = function testInteger (instance) {
-  return (typeof instance == 'number') && instance % 1 === 0;
-};
-types.boolean = function testBoolean (instance) {
-  return typeof instance == 'boolean';
-};
-types.array = function testArray (instance) {
-  return Array.isArray(instance);
-};
-types['null'] = function testNull (instance) {
-  return instance === null;
-};
-types.date = function testDate (instance) {
-  return instance instanceof Date;
-};
-types.any = function testAny (instance) {
-  return true;
-};
-types.object = function testObject (instance) {
-  // TODO: fix this - see #15
-  return instance && (typeof instance === 'object') && !(Array.isArray(instance)) && !(instance instanceof Date);
-};
-
-module.exports = Validator;
 
 
 /***/ }),
@@ -13178,6 +11266,711 @@ function populateMaps (extensions, types) {
 
 /***/ }),
 
+/***/ 1077:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+"use strict";
+
+const proc =
+  typeof process === 'object' && process
+    ? process
+    : {
+        stdout: null,
+        stderr: null,
+      }
+const EE = __nccwpck_require__(2361)
+const Stream = __nccwpck_require__(2781)
+const stringdecoder = __nccwpck_require__(1576)
+const SD = stringdecoder.StringDecoder
+
+const EOF = Symbol('EOF')
+const MAYBE_EMIT_END = Symbol('maybeEmitEnd')
+const EMITTED_END = Symbol('emittedEnd')
+const EMITTING_END = Symbol('emittingEnd')
+const EMITTED_ERROR = Symbol('emittedError')
+const CLOSED = Symbol('closed')
+const READ = Symbol('read')
+const FLUSH = Symbol('flush')
+const FLUSHCHUNK = Symbol('flushChunk')
+const ENCODING = Symbol('encoding')
+const DECODER = Symbol('decoder')
+const FLOWING = Symbol('flowing')
+const PAUSED = Symbol('paused')
+const RESUME = Symbol('resume')
+const BUFFER = Symbol('buffer')
+const PIPES = Symbol('pipes')
+const BUFFERLENGTH = Symbol('bufferLength')
+const BUFFERPUSH = Symbol('bufferPush')
+const BUFFERSHIFT = Symbol('bufferShift')
+const OBJECTMODE = Symbol('objectMode')
+// internal event when stream is destroyed
+const DESTROYED = Symbol('destroyed')
+// internal event when stream has an error
+const ERROR = Symbol('error')
+const EMITDATA = Symbol('emitData')
+const EMITEND = Symbol('emitEnd')
+const EMITEND2 = Symbol('emitEnd2')
+const ASYNC = Symbol('async')
+const ABORT = Symbol('abort')
+const ABORTED = Symbol('aborted')
+const SIGNAL = Symbol('signal')
+
+const defer = fn => Promise.resolve().then(fn)
+
+// TODO remove when Node v8 support drops
+const doIter = global._MP_NO_ITERATOR_SYMBOLS_ !== '1'
+const ASYNCITERATOR =
+  (doIter && Symbol.asyncIterator) || Symbol('asyncIterator not implemented')
+const ITERATOR =
+  (doIter && Symbol.iterator) || Symbol('iterator not implemented')
+
+// events that mean 'the stream is over'
+// these are treated specially, and re-emitted
+// if they are listened for after emitting.
+const isEndish = ev => ev === 'end' || ev === 'finish' || ev === 'prefinish'
+
+const isArrayBuffer = b =>
+  b instanceof ArrayBuffer ||
+  (typeof b === 'object' &&
+    b.constructor &&
+    b.constructor.name === 'ArrayBuffer' &&
+    b.byteLength >= 0)
+
+const isArrayBufferView = b => !Buffer.isBuffer(b) && ArrayBuffer.isView(b)
+
+class Pipe {
+  constructor(src, dest, opts) {
+    this.src = src
+    this.dest = dest
+    this.opts = opts
+    this.ondrain = () => src[RESUME]()
+    dest.on('drain', this.ondrain)
+  }
+  unpipe() {
+    this.dest.removeListener('drain', this.ondrain)
+  }
+  // istanbul ignore next - only here for the prototype
+  proxyErrors() {}
+  end() {
+    this.unpipe()
+    if (this.opts.end) this.dest.end()
+  }
+}
+
+class PipeProxyErrors extends Pipe {
+  unpipe() {
+    this.src.removeListener('error', this.proxyErrors)
+    super.unpipe()
+  }
+  constructor(src, dest, opts) {
+    super(src, dest, opts)
+    this.proxyErrors = er => dest.emit('error', er)
+    src.on('error', this.proxyErrors)
+  }
+}
+
+class Minipass extends Stream {
+  constructor(options) {
+    super()
+    this[FLOWING] = false
+    // whether we're explicitly paused
+    this[PAUSED] = false
+    this[PIPES] = []
+    this[BUFFER] = []
+    this[OBJECTMODE] = (options && options.objectMode) || false
+    if (this[OBJECTMODE]) this[ENCODING] = null
+    else this[ENCODING] = (options && options.encoding) || null
+    if (this[ENCODING] === 'buffer') this[ENCODING] = null
+    this[ASYNC] = (options && !!options.async) || false
+    this[DECODER] = this[ENCODING] ? new SD(this[ENCODING]) : null
+    this[EOF] = false
+    this[EMITTED_END] = false
+    this[EMITTING_END] = false
+    this[CLOSED] = false
+    this[EMITTED_ERROR] = null
+    this.writable = true
+    this.readable = true
+    this[BUFFERLENGTH] = 0
+    this[DESTROYED] = false
+    if (options && options.debugExposeBuffer === true) {
+      Object.defineProperty(this, 'buffer', { get: () => this[BUFFER] })
+    }
+    if (options && options.debugExposePipes === true) {
+      Object.defineProperty(this, 'pipes', { get: () => this[PIPES] })
+    }
+    this[SIGNAL] = options && options.signal
+    this[ABORTED] = false
+    if (this[SIGNAL]) {
+      this[SIGNAL].addEventListener('abort', () => this[ABORT]())
+      if (this[SIGNAL].aborted) {
+        this[ABORT]()
+      }
+    }
+  }
+
+  get bufferLength() {
+    return this[BUFFERLENGTH]
+  }
+
+  get encoding() {
+    return this[ENCODING]
+  }
+  set encoding(enc) {
+    if (this[OBJECTMODE]) throw new Error('cannot set encoding in objectMode')
+
+    if (
+      this[ENCODING] &&
+      enc !== this[ENCODING] &&
+      ((this[DECODER] && this[DECODER].lastNeed) || this[BUFFERLENGTH])
+    )
+      throw new Error('cannot change encoding')
+
+    if (this[ENCODING] !== enc) {
+      this[DECODER] = enc ? new SD(enc) : null
+      if (this[BUFFER].length)
+        this[BUFFER] = this[BUFFER].map(chunk => this[DECODER].write(chunk))
+    }
+
+    this[ENCODING] = enc
+  }
+
+  setEncoding(enc) {
+    this.encoding = enc
+  }
+
+  get objectMode() {
+    return this[OBJECTMODE]
+  }
+  set objectMode(om) {
+    this[OBJECTMODE] = this[OBJECTMODE] || !!om
+  }
+
+  get ['async']() {
+    return this[ASYNC]
+  }
+  set ['async'](a) {
+    this[ASYNC] = this[ASYNC] || !!a
+  }
+
+  // drop everything and get out of the flow completely
+  [ABORT]() {
+    this[ABORTED] = true
+    this.emit('abort', this[SIGNAL].reason)
+    this.destroy(this[SIGNAL].reason)
+  }
+
+  get aborted() {
+    return this[ABORTED]
+  }
+  set aborted(_) {}
+
+  write(chunk, encoding, cb) {
+    if (this[ABORTED]) return false
+    if (this[EOF]) throw new Error('write after end')
+
+    if (this[DESTROYED]) {
+      this.emit(
+        'error',
+        Object.assign(
+          new Error('Cannot call write after a stream was destroyed'),
+          { code: 'ERR_STREAM_DESTROYED' }
+        )
+      )
+      return true
+    }
+
+    if (typeof encoding === 'function') (cb = encoding), (encoding = 'utf8')
+
+    if (!encoding) encoding = 'utf8'
+
+    const fn = this[ASYNC] ? defer : f => f()
+
+    // convert array buffers and typed array views into buffers
+    // at some point in the future, we may want to do the opposite!
+    // leave strings and buffers as-is
+    // anything else switches us into object mode
+    if (!this[OBJECTMODE] && !Buffer.isBuffer(chunk)) {
+      if (isArrayBufferView(chunk))
+        chunk = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+      else if (isArrayBuffer(chunk)) chunk = Buffer.from(chunk)
+      else if (typeof chunk !== 'string')
+        // use the setter so we throw if we have encoding set
+        this.objectMode = true
+    }
+
+    // handle object mode up front, since it's simpler
+    // this yields better performance, fewer checks later.
+    if (this[OBJECTMODE]) {
+      /* istanbul ignore if - maybe impossible? */
+      if (this.flowing && this[BUFFERLENGTH] !== 0) this[FLUSH](true)
+
+      if (this.flowing) this.emit('data', chunk)
+      else this[BUFFERPUSH](chunk)
+
+      if (this[BUFFERLENGTH] !== 0) this.emit('readable')
+
+      if (cb) fn(cb)
+
+      return this.flowing
+    }
+
+    // at this point the chunk is a buffer or string
+    // don't buffer it up or send it to the decoder
+    if (!chunk.length) {
+      if (this[BUFFERLENGTH] !== 0) this.emit('readable')
+      if (cb) fn(cb)
+      return this.flowing
+    }
+
+    // fast-path writing strings of same encoding to a stream with
+    // an empty buffer, skipping the buffer/decoder dance
+    if (
+      typeof chunk === 'string' &&
+      // unless it is a string already ready for us to use
+      !(encoding === this[ENCODING] && !this[DECODER].lastNeed)
+    ) {
+      chunk = Buffer.from(chunk, encoding)
+    }
+
+    if (Buffer.isBuffer(chunk) && this[ENCODING])
+      chunk = this[DECODER].write(chunk)
+
+    // Note: flushing CAN potentially switch us into not-flowing mode
+    if (this.flowing && this[BUFFERLENGTH] !== 0) this[FLUSH](true)
+
+    if (this.flowing) this.emit('data', chunk)
+    else this[BUFFERPUSH](chunk)
+
+    if (this[BUFFERLENGTH] !== 0) this.emit('readable')
+
+    if (cb) fn(cb)
+
+    return this.flowing
+  }
+
+  read(n) {
+    if (this[DESTROYED]) return null
+
+    if (this[BUFFERLENGTH] === 0 || n === 0 || n > this[BUFFERLENGTH]) {
+      this[MAYBE_EMIT_END]()
+      return null
+    }
+
+    if (this[OBJECTMODE]) n = null
+
+    if (this[BUFFER].length > 1 && !this[OBJECTMODE]) {
+      if (this.encoding) this[BUFFER] = [this[BUFFER].join('')]
+      else this[BUFFER] = [Buffer.concat(this[BUFFER], this[BUFFERLENGTH])]
+    }
+
+    const ret = this[READ](n || null, this[BUFFER][0])
+    this[MAYBE_EMIT_END]()
+    return ret
+  }
+
+  [READ](n, chunk) {
+    if (n === chunk.length || n === null) this[BUFFERSHIFT]()
+    else {
+      this[BUFFER][0] = chunk.slice(n)
+      chunk = chunk.slice(0, n)
+      this[BUFFERLENGTH] -= n
+    }
+
+    this.emit('data', chunk)
+
+    if (!this[BUFFER].length && !this[EOF]) this.emit('drain')
+
+    return chunk
+  }
+
+  end(chunk, encoding, cb) {
+    if (typeof chunk === 'function') (cb = chunk), (chunk = null)
+    if (typeof encoding === 'function') (cb = encoding), (encoding = 'utf8')
+    if (chunk) this.write(chunk, encoding)
+    if (cb) this.once('end', cb)
+    this[EOF] = true
+    this.writable = false
+
+    // if we haven't written anything, then go ahead and emit,
+    // even if we're not reading.
+    // we'll re-emit if a new 'end' listener is added anyway.
+    // This makes MP more suitable to write-only use cases.
+    if (this.flowing || !this[PAUSED]) this[MAYBE_EMIT_END]()
+    return this
+  }
+
+  // don't let the internal resume be overwritten
+  [RESUME]() {
+    if (this[DESTROYED]) return
+
+    this[PAUSED] = false
+    this[FLOWING] = true
+    this.emit('resume')
+    if (this[BUFFER].length) this[FLUSH]()
+    else if (this[EOF]) this[MAYBE_EMIT_END]()
+    else this.emit('drain')
+  }
+
+  resume() {
+    return this[RESUME]()
+  }
+
+  pause() {
+    this[FLOWING] = false
+    this[PAUSED] = true
+  }
+
+  get destroyed() {
+    return this[DESTROYED]
+  }
+
+  get flowing() {
+    return this[FLOWING]
+  }
+
+  get paused() {
+    return this[PAUSED]
+  }
+
+  [BUFFERPUSH](chunk) {
+    if (this[OBJECTMODE]) this[BUFFERLENGTH] += 1
+    else this[BUFFERLENGTH] += chunk.length
+    this[BUFFER].push(chunk)
+  }
+
+  [BUFFERSHIFT]() {
+    if (this[OBJECTMODE]) this[BUFFERLENGTH] -= 1
+    else this[BUFFERLENGTH] -= this[BUFFER][0].length
+    return this[BUFFER].shift()
+  }
+
+  [FLUSH](noDrain) {
+    do {} while (this[FLUSHCHUNK](this[BUFFERSHIFT]()) && this[BUFFER].length)
+
+    if (!noDrain && !this[BUFFER].length && !this[EOF]) this.emit('drain')
+  }
+
+  [FLUSHCHUNK](chunk) {
+    this.emit('data', chunk)
+    return this.flowing
+  }
+
+  pipe(dest, opts) {
+    if (this[DESTROYED]) return
+
+    const ended = this[EMITTED_END]
+    opts = opts || {}
+    if (dest === proc.stdout || dest === proc.stderr) opts.end = false
+    else opts.end = opts.end !== false
+    opts.proxyErrors = !!opts.proxyErrors
+
+    // piping an ended stream ends immediately
+    if (ended) {
+      if (opts.end) dest.end()
+    } else {
+      this[PIPES].push(
+        !opts.proxyErrors
+          ? new Pipe(this, dest, opts)
+          : new PipeProxyErrors(this, dest, opts)
+      )
+      if (this[ASYNC]) defer(() => this[RESUME]())
+      else this[RESUME]()
+    }
+
+    return dest
+  }
+
+  unpipe(dest) {
+    const p = this[PIPES].find(p => p.dest === dest)
+    if (p) {
+      this[PIPES].splice(this[PIPES].indexOf(p), 1)
+      p.unpipe()
+    }
+  }
+
+  addListener(ev, fn) {
+    return this.on(ev, fn)
+  }
+
+  on(ev, fn) {
+    const ret = super.on(ev, fn)
+    if (ev === 'data' && !this[PIPES].length && !this.flowing) this[RESUME]()
+    else if (ev === 'readable' && this[BUFFERLENGTH] !== 0)
+      super.emit('readable')
+    else if (isEndish(ev) && this[EMITTED_END]) {
+      super.emit(ev)
+      this.removeAllListeners(ev)
+    } else if (ev === 'error' && this[EMITTED_ERROR]) {
+      if (this[ASYNC]) defer(() => fn.call(this, this[EMITTED_ERROR]))
+      else fn.call(this, this[EMITTED_ERROR])
+    }
+    return ret
+  }
+
+  get emittedEnd() {
+    return this[EMITTED_END]
+  }
+
+  [MAYBE_EMIT_END]() {
+    if (
+      !this[EMITTING_END] &&
+      !this[EMITTED_END] &&
+      !this[DESTROYED] &&
+      this[BUFFER].length === 0 &&
+      this[EOF]
+    ) {
+      this[EMITTING_END] = true
+      this.emit('end')
+      this.emit('prefinish')
+      this.emit('finish')
+      if (this[CLOSED]) this.emit('close')
+      this[EMITTING_END] = false
+    }
+  }
+
+  emit(ev, data, ...extra) {
+    // error and close are only events allowed after calling destroy()
+    if (ev !== 'error' && ev !== 'close' && ev !== DESTROYED && this[DESTROYED])
+      return
+    else if (ev === 'data') {
+      return !this[OBJECTMODE] && !data
+        ? false
+        : this[ASYNC]
+        ? defer(() => this[EMITDATA](data))
+        : this[EMITDATA](data)
+    } else if (ev === 'end') {
+      return this[EMITEND]()
+    } else if (ev === 'close') {
+      this[CLOSED] = true
+      // don't emit close before 'end' and 'finish'
+      if (!this[EMITTED_END] && !this[DESTROYED]) return
+      const ret = super.emit('close')
+      this.removeAllListeners('close')
+      return ret
+    } else if (ev === 'error') {
+      this[EMITTED_ERROR] = data
+      super.emit(ERROR, data)
+      const ret =
+        !this[SIGNAL] || this.listeners('error').length
+          ? super.emit('error', data)
+          : false
+      this[MAYBE_EMIT_END]()
+      return ret
+    } else if (ev === 'resume') {
+      const ret = super.emit('resume')
+      this[MAYBE_EMIT_END]()
+      return ret
+    } else if (ev === 'finish' || ev === 'prefinish') {
+      const ret = super.emit(ev)
+      this.removeAllListeners(ev)
+      return ret
+    }
+
+    // Some other unknown event
+    const ret = super.emit(ev, data, ...extra)
+    this[MAYBE_EMIT_END]()
+    return ret
+  }
+
+  [EMITDATA](data) {
+    for (const p of this[PIPES]) {
+      if (p.dest.write(data) === false) this.pause()
+    }
+    const ret = super.emit('data', data)
+    this[MAYBE_EMIT_END]()
+    return ret
+  }
+
+  [EMITEND]() {
+    if (this[EMITTED_END]) return
+
+    this[EMITTED_END] = true
+    this.readable = false
+    if (this[ASYNC]) defer(() => this[EMITEND2]())
+    else this[EMITEND2]()
+  }
+
+  [EMITEND2]() {
+    if (this[DECODER]) {
+      const data = this[DECODER].end()
+      if (data) {
+        for (const p of this[PIPES]) {
+          p.dest.write(data)
+        }
+        super.emit('data', data)
+      }
+    }
+
+    for (const p of this[PIPES]) {
+      p.end()
+    }
+    const ret = super.emit('end')
+    this.removeAllListeners('end')
+    return ret
+  }
+
+  // const all = await stream.collect()
+  collect() {
+    const buf = []
+    if (!this[OBJECTMODE]) buf.dataLength = 0
+    // set the promise first, in case an error is raised
+    // by triggering the flow here.
+    const p = this.promise()
+    this.on('data', c => {
+      buf.push(c)
+      if (!this[OBJECTMODE]) buf.dataLength += c.length
+    })
+    return p.then(() => buf)
+  }
+
+  // const data = await stream.concat()
+  concat() {
+    return this[OBJECTMODE]
+      ? Promise.reject(new Error('cannot concat in objectMode'))
+      : this.collect().then(buf =>
+          this[OBJECTMODE]
+            ? Promise.reject(new Error('cannot concat in objectMode'))
+            : this[ENCODING]
+            ? buf.join('')
+            : Buffer.concat(buf, buf.dataLength)
+        )
+  }
+
+  // stream.promise().then(() => done, er => emitted error)
+  promise() {
+    return new Promise((resolve, reject) => {
+      this.on(DESTROYED, () => reject(new Error('stream destroyed')))
+      this.on('error', er => reject(er))
+      this.on('end', () => resolve())
+    })
+  }
+
+  // for await (let chunk of stream)
+  [ASYNCITERATOR]() {
+    let stopped = false
+    const stop = () => {
+      this.pause()
+      stopped = true
+      return Promise.resolve({ done: true })
+    }
+    const next = () => {
+      if (stopped) return stop()
+      const res = this.read()
+      if (res !== null) return Promise.resolve({ done: false, value: res })
+
+      if (this[EOF]) return stop()
+
+      let resolve = null
+      let reject = null
+      const onerr = er => {
+        this.removeListener('data', ondata)
+        this.removeListener('end', onend)
+        stop()
+        reject(er)
+      }
+      const ondata = value => {
+        this.removeListener('error', onerr)
+        this.removeListener('end', onend)
+        this.pause()
+        resolve({ value: value, done: !!this[EOF] })
+      }
+      const onend = () => {
+        this.removeListener('error', onerr)
+        this.removeListener('data', ondata)
+        stop()
+        resolve({ done: true })
+      }
+      const ondestroy = () => onerr(new Error('stream destroyed'))
+      return new Promise((res, rej) => {
+        reject = rej
+        resolve = res
+        this.once(DESTROYED, ondestroy)
+        this.once('error', onerr)
+        this.once('end', onend)
+        this.once('data', ondata)
+      })
+    }
+
+    return {
+      next,
+      throw: stop,
+      return: stop,
+      [ASYNCITERATOR]() {
+        return this
+      },
+    }
+  }
+
+  // for (let chunk of stream)
+  [ITERATOR]() {
+    let stopped = false
+    const stop = () => {
+      this.pause()
+      this.removeListener(ERROR, stop)
+      this.removeListener('end', stop)
+      stopped = true
+      return { done: true }
+    }
+
+    const next = () => {
+      if (stopped) return stop()
+      const value = this.read()
+      return value === null ? stop() : { value }
+    }
+    this.once('end', stop)
+    this.once(ERROR, stop)
+
+    return {
+      next,
+      throw: stop,
+      return: stop,
+      [ITERATOR]() {
+        return this
+      },
+    }
+  }
+
+  destroy(er) {
+    if (this[DESTROYED]) {
+      if (er) this.emit('error', er)
+      else this.emit(DESTROYED)
+      return this
+    }
+
+    this[DESTROYED] = true
+
+    // throw away all buffered data, it's never coming out
+    this[BUFFER].length = 0
+    this[BUFFERLENGTH] = 0
+
+    if (typeof this.close === 'function' && !this[CLOSED]) this.close()
+
+    if (er) this.emit('error', er)
+    // if no error to emit, still reject pending promises
+    else this.emit(DESTROYED)
+
+    return this
+  }
+
+  static isStream(s) {
+    return (
+      !!s &&
+      (s instanceof Minipass ||
+        s instanceof Stream ||
+        (s instanceof EE &&
+          // readable
+          (typeof s.pipe === 'function' ||
+            // writable
+            (typeof s.write === 'function' && typeof s.end === 'function'))))
+    )
+  }
+}
+
+module.exports = Minipass
+
+
+/***/ }),
+
 /***/ 900:
 /***/ ((module) => {
 
@@ -13342,55 +12135,6 @@ function fmtLong(ms) {
 function plural(ms, msAbs, n, name) {
   var isPlural = msAbs >= n * 1.5;
   return Math.round(ms / n) + ' ' + name + (isPlural ? 's' : '');
-}
-
-
-/***/ }),
-
-/***/ 1223:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-var wrappy = __nccwpck_require__(2940)
-module.exports = wrappy(once)
-module.exports.strict = wrappy(onceStrict)
-
-once.proto = once(function () {
-  Object.defineProperty(Function.prototype, 'once', {
-    value: function () {
-      return once(this)
-    },
-    configurable: true
-  })
-
-  Object.defineProperty(Function.prototype, 'onceStrict', {
-    value: function () {
-      return onceStrict(this)
-    },
-    configurable: true
-  })
-})
-
-function once (fn) {
-  var f = function () {
-    if (f.called) return f.value
-    f.called = true
-    return f.value = fn.apply(this, arguments)
-  }
-  f.called = false
-  return f
-}
-
-function onceStrict (fn) {
-  var f = function () {
-    if (f.called)
-      throw new Error(f.onceError)
-    f.called = true
-    return f.value = fn.apply(this, arguments)
-  }
-  var name = fn.name || 'Function wrapped with `once`'
-  f.onceError = name + " shouldn't be called more than once"
-  f.called = false
-  return f
 }
 
 
@@ -14613,46 +13357,6 @@ exports["default"] = _default;
 
 /***/ }),
 
-/***/ 2940:
-/***/ ((module) => {
-
-// Returns a wrapper function that returns a wrapped callback
-// The wrapper function should do some stuff, and return a
-// presumably different callback function.
-// This makes sure that own properties are retained, so that
-// decorations and such are not lost along the way.
-module.exports = wrappy
-function wrappy (fn, cb) {
-  if (fn && cb) return wrappy(fn)(cb)
-
-  if (typeof fn !== 'function')
-    throw new TypeError('need wrapper function')
-
-  Object.keys(fn).forEach(function (k) {
-    wrapper[k] = fn[k]
-  })
-
-  return wrapper
-
-  function wrapper() {
-    var args = new Array(arguments.length)
-    for (var i = 0; i < args.length; i++) {
-      args[i] = arguments[i]
-    }
-    var ret = fn.apply(this, args)
-    var cb = args[args.length-1]
-    if (typeof ret === 'function' && ret !== cb) {
-      Object.keys(cb).forEach(function (k) {
-        ret[k] = cb[k]
-      })
-    }
-    return ret
-  }
-}
-
-
-/***/ }),
-
 /***/ 9491:
 /***/ ((module) => {
 
@@ -14690,6 +13394,14 @@ module.exports = require("events");
 
 "use strict";
 module.exports = require("fs");
+
+/***/ }),
+
+/***/ 3292:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("fs/promises");
 
 /***/ }),
 
@@ -14741,6 +13453,14 @@ module.exports = require("stream");
 
 /***/ }),
 
+/***/ 1576:
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("string_decoder");
+
+/***/ }),
+
 /***/ 4404:
 /***/ ((module) => {
 
@@ -14778,6 +13498,5559 @@ module.exports = require("util");
 
 "use strict";
 module.exports = require("zlib");
+
+/***/ }),
+
+/***/ 3707:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Glob = void 0;
+const minimatch_1 = __nccwpck_require__(3355);
+const path_scurry_1 = __nccwpck_require__(9569);
+const url_1 = __nccwpck_require__(7310);
+const pattern_js_1 = __nccwpck_require__(530);
+const walker_js_1 = __nccwpck_require__(8757);
+// if no process global, just call it linux.
+// so we default to case-sensitive, / separators
+const defaultPlatform = typeof process === 'object' &&
+    process &&
+    typeof process.platform === 'string'
+    ? process.platform
+    : 'linux';
+/**
+ * An object that can perform glob pattern traversals.
+ */
+class Glob {
+    absolute;
+    cwd;
+    dot;
+    follow;
+    ignore;
+    mark;
+    matchBase;
+    nobrace;
+    nocase;
+    nodir;
+    noext;
+    noglobstar;
+    pattern;
+    platform;
+    realpath;
+    scurry;
+    signal;
+    windowsPathsNoEscape;
+    withFileTypes;
+    /**
+     * The options provided to the constructor.
+     */
+    opts;
+    /**
+     * An array of parsed immutable {@link Pattern} objects.
+     */
+    patterns;
+    /**
+     * All options are stored as properties on the `Glob` object.
+     *
+     * See {@link GlobOptions} for full options descriptions.
+     *
+     * Note that a previous `Glob` object can be passed as the
+     * `GlobOptions` to another `Glob` instantiation to re-use settings
+     * and caches with a new pattern.
+     *
+     * Traversal functions can be called multiple times to run the walk
+     * again.
+     */
+    constructor(pattern, opts) {
+        this.withFileTypes = !!opts.withFileTypes;
+        this.signal = opts.signal;
+        this.follow = !!opts.follow;
+        this.dot = !!opts.dot;
+        this.nodir = !!opts.nodir;
+        this.mark = !!opts.mark;
+        if (!opts.cwd) {
+            this.cwd = '';
+        }
+        else if (opts.cwd instanceof URL || opts.cwd.startsWith('file://')) {
+            opts.cwd = (0, url_1.fileURLToPath)(opts.cwd);
+        }
+        this.cwd = opts.cwd || '';
+        this.nobrace = !!opts.nobrace;
+        this.noext = !!opts.noext;
+        this.realpath = !!opts.realpath;
+        this.absolute = !!opts.absolute;
+        this.noglobstar = !!opts.noglobstar;
+        this.matchBase = !!opts.matchBase;
+        if (this.withFileTypes && this.absolute) {
+            throw new Error('cannot set absolute:true and withFileTypes:true');
+        }
+        if (typeof pattern === 'string') {
+            pattern = [pattern];
+        }
+        this.windowsPathsNoEscape =
+            !!opts.windowsPathsNoEscape ||
+                opts.allowWindowsEscape === false;
+        if (this.windowsPathsNoEscape) {
+            pattern = pattern.map(p => p.replace(/\\/g, '/'));
+        }
+        if (this.matchBase) {
+            if (opts.noglobstar) {
+                throw new TypeError('base matching requires globstar');
+            }
+            pattern = pattern.map(p => (p.includes('/') ? p : `./**/${p}`));
+        }
+        this.pattern = pattern;
+        this.platform = opts.platform || defaultPlatform;
+        this.opts = { ...opts, platform: this.platform };
+        if (opts.scurry) {
+            this.scurry = opts.scurry;
+            if (opts.nocase !== undefined &&
+                opts.nocase !== opts.scurry.nocase) {
+                throw new Error('nocase option contradicts provided scurry option');
+            }
+        }
+        else {
+            const Scurry = opts.platform === 'win32'
+                ? path_scurry_1.PathScurryWin32
+                : opts.platform === 'darwin'
+                    ? path_scurry_1.PathScurryDarwin
+                    : opts.platform
+                        ? path_scurry_1.PathScurryPosix
+                        : path_scurry_1.PathScurry;
+            this.scurry = new Scurry(this.cwd, { nocase: opts.nocase });
+        }
+        this.nocase = this.scurry.nocase;
+        const mmo = {
+            // default nocase based on platform
+            ...opts,
+            dot: this.dot,
+            matchBase: this.matchBase,
+            nobrace: this.nobrace,
+            nocase: this.nocase,
+            nocaseMagicOnly: true,
+            nocomment: true,
+            noext: this.noext,
+            nonegate: true,
+            optimizationLevel: 2,
+            platform: this.platform,
+            windowsPathsNoEscape: this.windowsPathsNoEscape,
+        };
+        const mms = this.pattern.map(p => new minimatch_1.Minimatch(p, mmo));
+        const [matchSet, globParts] = mms.reduce((set, m) => {
+            set[0].push(...m.set);
+            set[1].push(...m.globParts);
+            return set;
+        }, [[], []]);
+        this.patterns = matchSet.map((set, i) => {
+            return new pattern_js_1.Pattern(set, globParts[i], 0, this.platform);
+        });
+    }
+    async walk() {
+        // Walkers always return array of Path objects, so we just have to
+        // coerce them into the right shape.  It will have already called
+        // realpath() if the option was set to do so, so we know that's cached.
+        // start out knowing the cwd, at least
+        return [
+            ...(await new walker_js_1.GlobWalker(this.patterns, this.scurry.cwd, {
+                ...this.opts,
+                platform: this.platform,
+                nocase: this.nocase,
+            }).walk()),
+        ];
+    }
+    walkSync() {
+        return [
+            ...new walker_js_1.GlobWalker(this.patterns, this.scurry.cwd, {
+                ...this.opts,
+                platform: this.platform,
+                nocase: this.nocase,
+            }).walkSync(),
+        ];
+    }
+    stream() {
+        return new walker_js_1.GlobStream(this.patterns, this.scurry.cwd, {
+            ...this.opts,
+            platform: this.platform,
+            nocase: this.nocase,
+        }).stream();
+    }
+    streamSync() {
+        return new walker_js_1.GlobStream(this.patterns, this.scurry.cwd, {
+            ...this.opts,
+            platform: this.platform,
+            nocase: this.nocase,
+        }).streamSync();
+    }
+    /**
+     * Default sync iteration function. Returns a Generator that
+     * iterates over the results.
+     */
+    iterateSync() {
+        return this.streamSync()[Symbol.iterator]();
+    }
+    [Symbol.iterator]() {
+        return this.iterateSync();
+    }
+    /**
+     * Default async iteration function. Returns an AsyncGenerator that
+     * iterates over the results.
+     */
+    iterate() {
+        return this.stream()[Symbol.asyncIterator]();
+    }
+    [Symbol.asyncIterator]() {
+        return this.iterate();
+    }
+}
+exports.Glob = Glob;
+//# sourceMappingURL=glob.js.map
+
+/***/ }),
+
+/***/ 1945:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.hasMagic = void 0;
+const glob_js_1 = __nccwpck_require__(3707);
+/**
+ * Return true if the patterns provided contain any magic
+ * glob characters.
+ */
+const hasMagic = (pattern, options = {}) => {
+    if (!Array.isArray(pattern)) {
+        pattern = [pattern];
+    }
+    const g = new glob_js_1.Glob(pattern, options);
+    return g.patterns.length === 0
+        ? false
+        : g.patterns.some(p => p.hasMagic());
+};
+exports.hasMagic = hasMagic;
+//# sourceMappingURL=has-magic.js.map
+
+/***/ }),
+
+/***/ 7056:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+// give it a pattern, and it'll be able to tell you if
+// a given path should be ignored.
+// Ignoring a path ignores its children if the pattern ends in /**
+// Ignores are always parsed in dot:true mode
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Ignore = void 0;
+const minimatch_1 = __nccwpck_require__(3355);
+const pattern_js_1 = __nccwpck_require__(530);
+const defaultPlatform = typeof process === 'object' &&
+    process &&
+    typeof process.platform === 'string'
+    ? process.platform
+    : 'linux';
+/**
+ * Class used to process ignored patterns
+ */
+class Ignore {
+    relative;
+    relativeChildren;
+    absolute;
+    absoluteChildren;
+    constructor(ignored, { nobrace, nocase, noext, noglobstar, platform = defaultPlatform, }) {
+        this.relative = [];
+        this.absolute = [];
+        this.relativeChildren = [];
+        this.absoluteChildren = [];
+        const mmopts = {
+            dot: true,
+            nobrace,
+            nocase,
+            noext,
+            noglobstar,
+            optimizationLevel: 2,
+            platform,
+        };
+        // this is a little weird, but it gives us a clean set of optimized
+        // minimatch matchers, without getting tripped up if one of them
+        // ends in /** inside a brace section, and it's only inefficient at
+        // the start of the walk, not along it.
+        // It'd be nice if the Pattern class just had a .test() method, but
+        // handling globstars is a bit of a pita, and that code already lives
+        // in minimatch anyway.
+        // Another way would be if maybe Minimatch could take its set/globParts
+        // as an option, and then we could at least just use Pattern to test
+        // for absolute-ness.
+        // Yet another way, Minimatch could take an array of glob strings, and
+        // a cwd option, and do the right thing.
+        for (const ign of ignored) {
+            const mm = new minimatch_1.Minimatch(ign, mmopts);
+            for (let i = 0; i < mm.set.length; i++) {
+                const parsed = mm.set[i];
+                const globParts = mm.globParts[i];
+                const p = new pattern_js_1.Pattern(parsed, globParts, 0, platform);
+                const m = new minimatch_1.Minimatch(p.globString(), mmopts);
+                const children = globParts[globParts.length - 1] === '**';
+                const absolute = p.isAbsolute();
+                if (absolute)
+                    this.absolute.push(m);
+                else
+                    this.relative.push(m);
+                if (children) {
+                    if (absolute)
+                        this.absoluteChildren.push(m);
+                    else
+                        this.relativeChildren.push(m);
+                }
+            }
+        }
+    }
+    ignored(p) {
+        const fullpath = p.fullpath();
+        const fullpaths = `${fullpath}/`;
+        const relative = p.relative() || '.';
+        const relatives = `${relative}/`;
+        for (const m of this.relative) {
+            if (m.match(relative) || m.match(relatives))
+                return true;
+        }
+        for (const m of this.absolute) {
+            if (m.match(fullpath) || m.match(fullpaths))
+                return true;
+        }
+        return false;
+    }
+    childrenIgnored(p) {
+        const fullpath = p.fullpath() + '/';
+        const relative = (p.relative() || '.') + '/';
+        for (const m of this.relativeChildren) {
+            if (m.match(relative))
+                return true;
+        }
+        for (const m of this.absoluteChildren) {
+            if (m.match(fullpath))
+                true;
+        }
+        return false;
+    }
+}
+exports.Ignore = Ignore;
+//# sourceMappingURL=ignore.js.map
+
+/***/ }),
+
+/***/ 9354:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.hasMagic = exports.Glob = exports.globIterateSync = exports.globIterate = exports.glob = exports.globSync = exports.globStream = exports.globStreamSync = void 0;
+const glob_js_1 = __nccwpck_require__(3707);
+const has_magic_js_1 = __nccwpck_require__(1945);
+function globStreamSync(pattern, options = {}) {
+    return new glob_js_1.Glob(pattern, options).streamSync();
+}
+exports.globStreamSync = globStreamSync;
+function globStream(pattern, options = {}) {
+    return new glob_js_1.Glob(pattern, options).stream();
+}
+exports.globStream = globStream;
+function globSync(pattern, options = {}) {
+    return new glob_js_1.Glob(pattern, options).walkSync();
+}
+exports.globSync = globSync;
+async function glob(pattern, options = {}) {
+    return new glob_js_1.Glob(pattern, options).walk();
+}
+exports.glob = glob;
+function globIterate(pattern, options = {}) {
+    return new glob_js_1.Glob(pattern, options).iterate();
+}
+exports.globIterate = globIterate;
+function globIterateSync(pattern, options = {}) {
+    return new glob_js_1.Glob(pattern, options).iterateSync();
+}
+exports.globIterateSync = globIterateSync;
+/* c8 ignore start */
+var glob_js_2 = __nccwpck_require__(3707);
+Object.defineProperty(exports, "Glob", ({ enumerable: true, get: function () { return glob_js_2.Glob; } }));
+var has_magic_js_2 = __nccwpck_require__(1945);
+Object.defineProperty(exports, "hasMagic", ({ enumerable: true, get: function () { return has_magic_js_2.hasMagic; } }));
+/* c8 ignore stop */
+exports["default"] = Object.assign(glob, {
+    glob,
+    globSync,
+    globStream,
+    globStreamSync,
+    globIterate,
+    globIterateSync,
+    Glob: glob_js_1.Glob,
+    hasMagic: has_magic_js_1.hasMagic,
+});
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 530:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+// this is just a very light wrapper around 2 arrays with an offset index
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Pattern = void 0;
+const minimatch_1 = __nccwpck_require__(3355);
+const isPatternList = (pl) => pl.length >= 1;
+const isGlobList = (gl) => gl.length >= 1;
+/**
+ * An immutable-ish view on an array of glob parts and their parsed
+ * results
+ */
+class Pattern {
+    #patternList;
+    #globList;
+    #index;
+    length;
+    #platform;
+    #rest;
+    #globString;
+    #isDrive;
+    #isUNC;
+    #isAbsolute;
+    #followGlobstar = true;
+    constructor(patternList, globList, index, platform) {
+        if (!isPatternList(patternList)) {
+            throw new TypeError('empty pattern list');
+        }
+        if (!isGlobList(globList)) {
+            throw new TypeError('empty glob list');
+        }
+        if (globList.length !== patternList.length) {
+            throw new TypeError('mismatched pattern list and glob list lengths');
+        }
+        this.length = patternList.length;
+        if (index < 0 || index >= this.length) {
+            throw new TypeError('index out of range');
+        }
+        this.#patternList = patternList;
+        this.#globList = globList;
+        this.#index = index;
+        this.#platform = platform;
+        // normalize root entries of absolute patterns on initial creation.
+        if (this.#index === 0) {
+            // c: => ['c:/']
+            // C:/ => ['C:/']
+            // C:/x => ['C:/', 'x']
+            // //host/share => ['//host/share/']
+            // //host/share/ => ['//host/share/']
+            // //host/share/x => ['//host/share/', 'x']
+            // /etc => ['/', 'etc']
+            // / => ['/']
+            if (this.isUNC()) {
+                // '' / '' / 'host' / 'share'
+                const [p0, p1, p2, p3, ...prest] = this.#patternList;
+                const [g0, g1, g2, g3, ...grest] = this.#globList;
+                if (prest[0] === '') {
+                    // ends in /
+                    prest.shift();
+                    grest.shift();
+                }
+                const p = [p0, p1, p2, p3, ''].join('/');
+                const g = [g0, g1, g2, g3, ''].join('/');
+                this.#patternList = [p, ...prest];
+                this.#globList = [g, ...grest];
+                this.length = this.#patternList.length;
+            }
+            else if (this.isDrive() || this.isAbsolute()) {
+                const [p1, ...prest] = this.#patternList;
+                const [g1, ...grest] = this.#globList;
+                if (prest[0] === '') {
+                    // ends in /
+                    prest.shift();
+                    grest.shift();
+                }
+                const p = p1 + '/';
+                const g = g1 + '/';
+                this.#patternList = [p, ...prest];
+                this.#globList = [g, ...grest];
+                this.length = this.#patternList.length;
+            }
+        }
+    }
+    /**
+     * The first entry in the parsed list of patterns
+     */
+    pattern() {
+        return this.#patternList[this.#index];
+    }
+    /**
+     * true of if pattern() returns a string
+     */
+    isString() {
+        return typeof this.#patternList[this.#index] === 'string';
+    }
+    /**
+     * true of if pattern() returns GLOBSTAR
+     */
+    isGlobstar() {
+        return this.#patternList[this.#index] === minimatch_1.GLOBSTAR;
+    }
+    /**
+     * true if pattern() returns a regexp
+     */
+    isRegExp() {
+        return this.#patternList[this.#index] instanceof RegExp;
+    }
+    /**
+     * The /-joined set of glob parts that make up this pattern
+     */
+    globString() {
+        return (this.#globString =
+            this.#globString ||
+                (this.#index === 0
+                    ? this.isAbsolute()
+                        ? this.#globList[0] + this.#globList.slice(1).join('/')
+                        : this.#globList.join('/')
+                    : this.#globList.slice(this.#index).join('/')));
+    }
+    /**
+     * true if there are more pattern parts after this one
+     */
+    hasMore() {
+        return this.length > this.#index + 1;
+    }
+    /**
+     * The rest of the pattern after this part, or null if this is the end
+     */
+    rest() {
+        if (this.#rest !== undefined)
+            return this.#rest;
+        if (!this.hasMore())
+            return (this.#rest = null);
+        this.#rest = new Pattern(this.#patternList, this.#globList, this.#index + 1, this.#platform);
+        this.#rest.#isAbsolute = this.#isAbsolute;
+        this.#rest.#isUNC = this.#isUNC;
+        this.#rest.#isDrive = this.#isDrive;
+        return this.#rest;
+    }
+    /**
+     * true if the pattern represents a //unc/path/ on windows
+     */
+    isUNC() {
+        const pl = this.#patternList;
+        return this.#isUNC !== undefined
+            ? this.#isUNC
+            : (this.#isUNC =
+                this.#platform === 'win32' &&
+                    this.#index === 0 &&
+                    pl[0] === '' &&
+                    pl[1] === '' &&
+                    typeof pl[2] === 'string' &&
+                    !!pl[2] &&
+                    typeof pl[3] === 'string' &&
+                    !!pl[3]);
+    }
+    // pattern like C:/...
+    // split = ['C:', ...]
+    // XXX: would be nice to handle patterns like `c:*` to test the cwd
+    // in c: for *, but I don't know of a way to even figure out what that
+    // cwd is without actually chdir'ing into it?
+    /**
+     * True if the pattern starts with a drive letter on Windows
+     */
+    isDrive() {
+        const pl = this.#patternList;
+        return this.#isDrive !== undefined
+            ? this.#isDrive
+            : (this.#isDrive =
+                this.#platform === 'win32' &&
+                    this.#index === 0 &&
+                    this.length > 1 &&
+                    typeof pl[0] === 'string' &&
+                    /^[a-z]:$/i.test(pl[0]));
+    }
+    // pattern = '/' or '/...' or '/x/...'
+    // split = ['', ''] or ['', ...] or ['', 'x', ...]
+    // Drive and UNC both considered absolute on windows
+    /**
+     * True if the pattern is rooted on an absolute path
+     */
+    isAbsolute() {
+        const pl = this.#patternList;
+        return this.#isAbsolute !== undefined
+            ? this.#isAbsolute
+            : (this.#isAbsolute =
+                (pl[0] === '' && pl.length > 1) ||
+                    this.isDrive() ||
+                    this.isUNC());
+    }
+    /**
+     * consume the root of the pattern, and return it
+     */
+    root() {
+        const p = this.#patternList[0];
+        return typeof p === 'string' && this.isAbsolute() && this.#index === 0
+            ? p
+            : '';
+    }
+    /**
+     * True if the pattern has any non-string components
+     */
+    hasMagic() {
+        for (let i = 0; i < this.length; i++) {
+            if (typeof this.#patternList[i] !== 'string') {
+                return true;
+            }
+        }
+        return false;
+    }
+    /**
+     * Check to see if the current globstar pattern is allowed to follow
+     * a symbolic link.
+     */
+    checkFollowGlobstar() {
+        return !(this.#index === 0 ||
+            !this.isGlobstar() ||
+            !this.#followGlobstar);
+    }
+    /**
+     * Mark that the current globstar pattern is following a symbolic link
+     */
+    markFollowGlobstar() {
+        if (this.#index === 0 || !this.isGlobstar() || !this.#followGlobstar)
+            return false;
+        this.#followGlobstar = false;
+        return true;
+    }
+}
+exports.Pattern = Pattern;
+//# sourceMappingURL=pattern.js.map
+
+/***/ }),
+
+/***/ 146:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+// synchronous utility for filtering entries and calculating subwalks
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Processor = exports.SubWalks = exports.MatchRecord = exports.HasWalkedCache = void 0;
+const minimatch_1 = __nccwpck_require__(3355);
+/**
+ * A cache of which patterns have been processed for a given Path
+ */
+class HasWalkedCache {
+    store;
+    constructor(store = new Map()) {
+        this.store = store;
+    }
+    copy() {
+        return new HasWalkedCache(new Map(this.store));
+    }
+    hasWalked(target, pattern) {
+        return this.store.get(target.fullpath())?.has(pattern.globString());
+    }
+    storeWalked(target, pattern) {
+        const fullpath = target.fullpath();
+        const cached = this.store.get(fullpath);
+        if (cached)
+            cached.add(pattern.globString());
+        else
+            this.store.set(fullpath, new Set([pattern.globString()]));
+    }
+}
+exports.HasWalkedCache = HasWalkedCache;
+/**
+ * A record of which paths have been matched in a given walk step,
+ * and whether they only are considered a match if they are a directory,
+ * and whether their absolute or relative path should be returned.
+ */
+class MatchRecord {
+    store = new Map();
+    add(target, absolute, ifDir) {
+        const n = (absolute ? 2 : 0) | (ifDir ? 1 : 0);
+        const current = this.store.get(target);
+        this.store.set(target, current === undefined ? n : n & current);
+    }
+    // match, absolute, ifdir
+    entries() {
+        return [...this.store.entries()].map(([path, n]) => [
+            path,
+            !!(n & 2),
+            !!(n & 1),
+        ]);
+    }
+}
+exports.MatchRecord = MatchRecord;
+/**
+ * A collection of patterns that must be processed in a subsequent step
+ * for a given path.
+ */
+class SubWalks {
+    store = new Map();
+    add(target, pattern) {
+        if (!target.canReaddir()) {
+            return;
+        }
+        const subs = this.store.get(target);
+        if (subs) {
+            if (!subs.find(p => p.globString() === pattern.globString())) {
+                subs.push(pattern);
+            }
+        }
+        else
+            this.store.set(target, [pattern]);
+    }
+    get(target) {
+        const subs = this.store.get(target);
+        /* c8 ignore start */
+        if (!subs) {
+            throw new Error('attempting to walk unknown path');
+        }
+        /* c8 ignore stop */
+        return subs;
+    }
+    entries() {
+        return this.keys().map(k => [k, this.store.get(k)]);
+    }
+    keys() {
+        return [...this.store.keys()].filter(t => t.canReaddir());
+    }
+}
+exports.SubWalks = SubWalks;
+/**
+ * The class that processes patterns for a given path.
+ *
+ * Handles child entry filtering, and determining whether a path's
+ * directory contents must be read.
+ */
+class Processor {
+    hasWalkedCache;
+    matches = new MatchRecord();
+    subwalks = new SubWalks();
+    patterns;
+    follow;
+    dot;
+    opts;
+    constructor(opts, hasWalkedCache) {
+        this.opts = opts;
+        this.follow = !!opts.follow;
+        this.dot = !!opts.dot;
+        this.hasWalkedCache = hasWalkedCache
+            ? hasWalkedCache.copy()
+            : new HasWalkedCache();
+    }
+    processPatterns(target, patterns) {
+        this.patterns = patterns;
+        const processingSet = patterns.map(p => [target, p]);
+        // map of paths to the magic-starting subwalks they need to walk
+        // first item in patterns is the filter
+        for (let [t, pattern] of processingSet) {
+            this.hasWalkedCache.storeWalked(t, pattern);
+            const root = pattern.root();
+            const absolute = pattern.isAbsolute();
+            // start absolute patterns at root
+            if (root) {
+                t = t.resolve(root);
+                const rest = pattern.rest();
+                if (!rest) {
+                    this.matches.add(t, true, false);
+                    continue;
+                }
+                else {
+                    pattern = rest;
+                }
+            }
+            let p;
+            let rest;
+            let changed = false;
+            while (typeof (p = pattern.pattern()) === 'string' &&
+                (rest = pattern.rest())) {
+                const c = t.resolve(p);
+                // we can be reasonably sure that .. is a readable dir
+                if (c.isUnknown() && p !== '..')
+                    break;
+                t = c;
+                pattern = rest;
+                changed = true;
+            }
+            p = pattern.pattern();
+            rest = pattern.rest();
+            if (changed) {
+                if (this.hasWalkedCache.hasWalked(t, pattern))
+                    continue;
+                this.hasWalkedCache.storeWalked(t, pattern);
+            }
+            // now we have either a final string for a known entry,
+            // more strings for an unknown entry,
+            // or a pattern starting with magic, mounted on t.
+            if (typeof p === 'string') {
+                // must be final entry
+                if (!rest) {
+                    const ifDir = p === '..' || p === '' || p === '.';
+                    this.matches.add(t.resolve(p), absolute, ifDir);
+                }
+                else {
+                    this.subwalks.add(t, pattern);
+                }
+                continue;
+            }
+            else if (p === minimatch_1.GLOBSTAR) {
+                // if no rest, match and subwalk pattern
+                // if rest, process rest and subwalk pattern
+                // if it's a symlink, but we didn't get here by way of a
+                // globstar match (meaning it's the first time THIS globstar
+                // has traversed a symlink), then we follow it. Otherwise, stop.
+                if (!t.isSymbolicLink() ||
+                    this.follow ||
+                    pattern.checkFollowGlobstar()) {
+                    this.subwalks.add(t, pattern);
+                }
+                const rp = rest?.pattern();
+                const rrest = rest?.rest();
+                if (!rest || ((rp === '' || rp === '.') && !rrest)) {
+                    // only HAS to be a dir if it ends in **/ or **/.
+                    // but ending in ** will match files as well.
+                    this.matches.add(t, absolute, rp === '' || rp === '.');
+                }
+                else {
+                    if (rp === '..') {
+                        // this would mean you're matching **/.. at the fs root,
+                        // and no thanks, I'm not gonna test that specific case.
+                        /* c8 ignore start */
+                        const tp = t.parent || t;
+                        /* c8 ignore stop */
+                        if (!rrest)
+                            this.matches.add(tp, absolute, true);
+                        else if (!this.hasWalkedCache.hasWalked(tp, rrest)) {
+                            this.subwalks.add(tp, rrest);
+                        }
+                    }
+                }
+            }
+            else if (p instanceof RegExp) {
+                this.subwalks.add(t, pattern);
+            }
+        }
+        return this;
+    }
+    subwalkTargets() {
+        return this.subwalks.keys();
+    }
+    child() {
+        return new Processor(this.opts, this.hasWalkedCache);
+    }
+    // return a new Processor containing the subwalks for each
+    // child entry, and a set of matches, and
+    // a hasWalkedCache that's a copy of this one
+    // then we're going to call
+    filterEntries(parent, entries) {
+        const patterns = this.subwalks.get(parent);
+        // put matches and entry walks into the results processor
+        const results = this.child();
+        for (const e of entries) {
+            for (const pattern of patterns) {
+                const absolute = pattern.isAbsolute();
+                const p = pattern.pattern();
+                const rest = pattern.rest();
+                if (p === minimatch_1.GLOBSTAR) {
+                    results.testGlobstar(e, pattern, rest, absolute);
+                }
+                else if (p instanceof RegExp) {
+                    results.testRegExp(e, p, rest, absolute);
+                }
+                else {
+                    results.testString(e, p, rest, absolute);
+                }
+            }
+        }
+        return results;
+    }
+    testGlobstar(e, pattern, rest, absolute) {
+        if (this.dot || !e.name.startsWith('.')) {
+            if (!pattern.hasMore()) {
+                this.matches.add(e, absolute, false);
+            }
+            if (e.canReaddir()) {
+                // if we're in follow mode or it's not a symlink, just keep
+                // testing the same pattern. If there's more after the globstar,
+                // then this symlink consumes the globstar. If not, then we can
+                // follow at most ONE symlink along the way, so we mark it, which
+                // also checks to ensure that it wasn't already marked.
+                if (this.follow || !e.isSymbolicLink()) {
+                    this.subwalks.add(e, pattern);
+                }
+                else if (e.isSymbolicLink()) {
+                    if (rest && pattern.checkFollowGlobstar()) {
+                        this.subwalks.add(e, rest);
+                    }
+                    else if (pattern.markFollowGlobstar()) {
+                        this.subwalks.add(e, pattern);
+                    }
+                }
+            }
+        }
+        // if the NEXT thing matches this entry, then also add
+        // the rest.
+        if (rest) {
+            const rp = rest.pattern();
+            if (typeof rp === 'string' &&
+                // dots and empty were handled already
+                rp !== '..' &&
+                rp !== '' &&
+                rp !== '.') {
+                this.testString(e, rp, rest.rest(), absolute);
+            }
+            else if (rp === '..') {
+                /* c8 ignore start */
+                const ep = e.parent || e;
+                /* c8 ignore stop */
+                this.subwalks.add(ep, rest);
+            }
+            else if (rp instanceof RegExp) {
+                this.testRegExp(e, rp, rest.rest(), absolute);
+            }
+        }
+    }
+    testRegExp(e, p, rest, absolute) {
+        if (!p.test(e.name))
+            return;
+        if (!rest) {
+            this.matches.add(e, absolute, false);
+        }
+        else {
+            this.subwalks.add(e, rest);
+        }
+    }
+    testString(e, p, rest, absolute) {
+        // should never happen?
+        if (!e.isNamed(p))
+            return;
+        if (!rest) {
+            this.matches.add(e, absolute, false);
+        }
+        else {
+            this.subwalks.add(e, rest);
+        }
+    }
+}
+exports.Processor = Processor;
+//# sourceMappingURL=processor.js.map
+
+/***/ }),
+
+/***/ 8757:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.GlobStream = exports.GlobWalker = exports.GlobUtil = void 0;
+/**
+ * Single-use utility classes to provide functionality to the {@link Glob}
+ * methods.
+ *
+ * @module
+ */
+const minipass_1 = __importDefault(__nccwpck_require__(1077));
+const ignore_js_1 = __nccwpck_require__(7056);
+const processor_js_1 = __nccwpck_require__(146);
+const makeIgnore = (ignore, opts) => typeof ignore === 'string'
+    ? new ignore_js_1.Ignore([ignore], opts)
+    : Array.isArray(ignore)
+        ? new ignore_js_1.Ignore(ignore, opts)
+        : /* c8 ignore start */
+            ignore;
+/* c8 ignore stop */
+/**
+ * basic walking utilities that all the glob walker types use
+ */
+class GlobUtil {
+    path;
+    patterns;
+    opts;
+    seen = new Set();
+    paused = false;
+    aborted = false;
+    #onResume = [];
+    #ignore;
+    #sep;
+    signal;
+    constructor(patterns, path, opts) {
+        this.patterns = patterns;
+        this.path = path;
+        this.opts = opts;
+        this.#sep = opts.platform === 'win32' ? '\\' : '/';
+        if (opts.ignore) {
+            this.#ignore = makeIgnore(opts.ignore, opts);
+        }
+        if (opts.signal) {
+            this.signal = opts.signal;
+            this.signal.addEventListener('abort', () => {
+                this.#onResume.length = 0;
+            });
+        }
+    }
+    #ignored(path) {
+        return this.seen.has(path) || !!this.#ignore?.ignored(path);
+    }
+    #childrenIgnored(path) {
+        return !!this.#ignore?.childrenIgnored(path);
+    }
+    // backpressure mechanism
+    pause() {
+        this.paused = true;
+    }
+    resume() {
+        /* c8 ignore start */
+        if (this.signal?.aborted)
+            return;
+        /* c8 ignore stop */
+        this.paused = false;
+        let fn = undefined;
+        while (!this.paused && (fn = this.#onResume.shift())) {
+            fn();
+        }
+    }
+    onResume(fn) {
+        if (this.signal?.aborted)
+            return;
+        /* c8 ignore start */
+        if (!this.paused) {
+            fn();
+        }
+        else {
+            /* c8 ignore stop */
+            this.#onResume.push(fn);
+        }
+    }
+    // do the requisite realpath/stat checking, and return the path
+    // to add or undefined to filter it out.
+    async matchCheck(e, ifDir) {
+        if (ifDir && this.opts.nodir)
+            return undefined;
+        let rpc;
+        if (this.opts.realpath) {
+            rpc = e.realpathCached() || (await e.realpath());
+            if (!rpc)
+                return undefined;
+            e = rpc;
+        }
+        const needStat = e.isUnknown();
+        return this.matchCheckTest(needStat ? await e.lstat() : e, ifDir);
+    }
+    matchCheckTest(e, ifDir) {
+        return e &&
+            !this.#ignored(e) &&
+            (!ifDir || e.canReaddir()) &&
+            (!this.opts.nodir || !e.isDirectory())
+            ? e
+            : undefined;
+    }
+    matchCheckSync(e, ifDir) {
+        if (ifDir && this.opts.nodir)
+            return undefined;
+        let rpc;
+        if (this.opts.realpath) {
+            rpc = e.realpathCached() || e.realpathSync();
+            if (!rpc)
+                return undefined;
+            e = rpc;
+        }
+        const needStat = e.isUnknown();
+        return this.matchCheckTest(needStat ? e.lstatSync() : e, ifDir);
+    }
+    matchFinish(e, absolute) {
+        if (this.#ignored(e))
+            return;
+        this.seen.add(e);
+        const mark = this.opts.mark && e.isDirectory() ? this.#sep : '';
+        // ok, we have what we need!
+        if (this.opts.withFileTypes) {
+            this.matchEmit(e);
+        }
+        else if (this.opts.absolute || absolute) {
+            this.matchEmit(e.fullpath() + mark);
+        }
+        else {
+            const rel = e.relative();
+            this.matchEmit(!rel && mark ? './' : rel + mark);
+        }
+    }
+    async match(e, absolute, ifDir) {
+        const p = await this.matchCheck(e, ifDir);
+        if (p)
+            this.matchFinish(p, absolute);
+    }
+    matchSync(e, absolute, ifDir) {
+        const p = this.matchCheckSync(e, ifDir);
+        if (p)
+            this.matchFinish(p, absolute);
+    }
+    walkCB(target, patterns, cb) {
+        /* c8 ignore start */
+        if (this.signal?.aborted)
+            cb();
+        /* c8 ignore stop */
+        this.walkCB2(target, patterns, new processor_js_1.Processor(this.opts), cb);
+    }
+    walkCB2(target, patterns, processor, cb) {
+        if (this.#childrenIgnored(target))
+            return cb();
+        if (this.signal?.aborted)
+            cb();
+        if (this.paused) {
+            this.onResume(() => this.walkCB2(target, patterns, processor, cb));
+            return;
+        }
+        processor.processPatterns(target, patterns);
+        // done processing.  all of the above is sync, can be abstracted out.
+        // subwalks is a map of paths to the entry filters they need
+        // matches is a map of paths to [absolute, ifDir] tuples.
+        let tasks = 1;
+        const next = () => {
+            if (--tasks === 0)
+                cb();
+        };
+        for (const [m, absolute, ifDir] of processor.matches.entries()) {
+            if (this.#ignored(m))
+                continue;
+            tasks++;
+            this.match(m, absolute, ifDir).then(() => next());
+        }
+        for (const t of processor.subwalkTargets()) {
+            tasks++;
+            const childrenCached = t.readdirCached();
+            if (t.calledReaddir())
+                this.walkCB3(t, childrenCached, processor, next);
+            else {
+                t.readdirCB((_, entries) => this.walkCB3(t, entries, processor, next), true);
+            }
+        }
+        next();
+    }
+    walkCB3(target, entries, processor, cb) {
+        processor = processor.filterEntries(target, entries);
+        let tasks = 1;
+        const next = () => {
+            if (--tasks === 0)
+                cb();
+        };
+        for (const [m, absolute, ifDir] of processor.matches.entries()) {
+            if (this.#ignored(m))
+                continue;
+            tasks++;
+            this.match(m, absolute, ifDir).then(() => next());
+        }
+        for (const [target, patterns] of processor.subwalks.entries()) {
+            tasks++;
+            this.walkCB2(target, patterns, processor.child(), next);
+        }
+        next();
+    }
+    walkCBSync(target, patterns, cb) {
+        /* c8 ignore start */
+        if (this.signal?.aborted)
+            cb();
+        /* c8 ignore stop */
+        this.walkCB2Sync(target, patterns, new processor_js_1.Processor(this.opts), cb);
+    }
+    walkCB2Sync(target, patterns, processor, cb) {
+        if (this.#childrenIgnored(target))
+            return cb();
+        if (this.signal?.aborted)
+            cb();
+        if (this.paused) {
+            this.onResume(() => this.walkCB2Sync(target, patterns, processor, cb));
+            return;
+        }
+        processor.processPatterns(target, patterns);
+        // done processing.  all of the above is sync, can be abstracted out.
+        // subwalks is a map of paths to the entry filters they need
+        // matches is a map of paths to [absolute, ifDir] tuples.
+        let tasks = 1;
+        const next = () => {
+            if (--tasks === 0)
+                cb();
+        };
+        for (const [m, absolute, ifDir] of processor.matches.entries()) {
+            if (this.#ignored(m))
+                continue;
+            this.matchSync(m, absolute, ifDir);
+        }
+        for (const t of processor.subwalkTargets()) {
+            tasks++;
+            const children = t.readdirSync();
+            this.walkCB3Sync(t, children, processor, next);
+        }
+        next();
+    }
+    walkCB3Sync(target, entries, processor, cb) {
+        processor = processor.filterEntries(target, entries);
+        let tasks = 1;
+        const next = () => {
+            if (--tasks === 0)
+                cb();
+        };
+        for (const [m, absolute, ifDir] of processor.matches.entries()) {
+            if (this.#ignored(m))
+                continue;
+            this.matchSync(m, absolute, ifDir);
+        }
+        for (const [target, patterns] of processor.subwalks.entries()) {
+            tasks++;
+            this.walkCB2Sync(target, patterns, processor.child(), next);
+        }
+        next();
+    }
+}
+exports.GlobUtil = GlobUtil;
+class GlobWalker extends GlobUtil {
+    matches;
+    constructor(patterns, path, opts) {
+        super(patterns, path, opts);
+        this.matches = new Set();
+    }
+    matchEmit(e) {
+        this.matches.add(e);
+    }
+    async walk() {
+        if (this.signal?.aborted)
+            throw this.signal.reason;
+        const t = this.path.isUnknown() ? await this.path.lstat() : this.path;
+        if (t) {
+            await new Promise((res, rej) => {
+                this.walkCB(t, this.patterns, () => {
+                    if (this.signal?.aborted) {
+                        rej(this.signal.reason);
+                    }
+                    else {
+                        res(this.matches);
+                    }
+                });
+            });
+        }
+        return this.matches;
+    }
+    walkSync() {
+        if (this.signal?.aborted)
+            throw this.signal.reason;
+        const t = this.path.isUnknown() ? this.path.lstatSync() : this.path;
+        // nothing for the callback to do, because this never pauses
+        if (t) {
+            this.walkCBSync(t, this.patterns, () => {
+                if (this.signal?.aborted)
+                    throw this.signal.reason;
+            });
+        }
+        return this.matches;
+    }
+}
+exports.GlobWalker = GlobWalker;
+class GlobStream extends GlobUtil {
+    results;
+    constructor(patterns, path, opts) {
+        super(patterns, path, opts);
+        this.results = new minipass_1.default({
+            signal: this.signal,
+            objectMode: true,
+        });
+        this.results.on('drain', () => this.resume());
+        this.results.on('resume', () => this.resume());
+    }
+    matchEmit(e) {
+        this.results.write(e);
+        if (!this.results.flowing)
+            this.pause();
+    }
+    stream() {
+        const target = this.path;
+        if (target.isUnknown()) {
+            target.lstat().then(e => {
+                if (e) {
+                    this.walkCB(target, this.patterns, () => this.results.end());
+                }
+                else {
+                    this.results.end();
+                }
+            });
+        }
+        else {
+            this.walkCB(target, this.patterns, () => this.results.end());
+        }
+        return this.results;
+    }
+    streamSync() {
+        const target = this.path.isUnknown()
+            ? this.path.lstatSync()
+            : this.path;
+        if (target) {
+            this.walkCBSync(target, this.patterns, () => this.results.end());
+        }
+        else {
+            this.results.end();
+        }
+        return this.results;
+    }
+}
+exports.GlobStream = GlobStream;
+//# sourceMappingURL=walker.js.map
+
+/***/ }),
+
+/***/ 314:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+// translate the various posix character classes into unicode properties
+// this works across all unicode locales
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parseClass = void 0;
+// { <posix class>: [<translation>, /u flag required, negated]
+const posixClasses = {
+    '[:alnum:]': ['\\p{L}\\p{Nl}\\p{Nd}', true],
+    '[:alpha:]': ['\\p{L}\\p{Nl}', true],
+    '[:ascii:]': ['\\x' + '00-\\x' + '7f', false],
+    '[:blank:]': ['\\p{Zs}\\t', true],
+    '[:cntrl:]': ['\\p{Cc}', true],
+    '[:digit:]': ['\\p{Nd}', true],
+    '[:graph:]': ['\\p{Z}\\p{C}', true, true],
+    '[:lower:]': ['\\p{Ll}', true],
+    '[:print:]': ['\\p{C}', true],
+    '[:punct:]': ['\\p{P}', true],
+    '[:space:]': ['\\p{Z}\\t\\r\\n\\v\\f', true],
+    '[:upper:]': ['\\p{Lu}', true],
+    '[:word:]': ['\\p{L}\\p{Nl}\\p{Nd}\\p{Pc}', true],
+    '[:xdigit:]': ['A-Fa-f0-9', false],
+};
+// only need to escape a few things inside of brace expressions
+const regExpEscape = (s) => s.replace(/[[\]\\-]/g, '\\$&');
+const rangesToString = (ranges) => {
+    return (ranges
+        // .map(r => r.replace(/[[\]]/g, '\\$&').replace(/^-/, '\\-'))
+        .join(''));
+};
+// takes a glob string at a posix brace expression, and returns
+// an equivalent regular expression source, and boolean indicating
+// whether the /u flag needs to be applied, and the number of chars
+// consumed to parse the character class.
+// This also removes out of order ranges, and returns ($.) if the
+// entire class just no good.
+const parseClass = (glob, position) => {
+    const pos = position;
+    /* c8 ignore start */
+    if (glob.charAt(pos) !== '[') {
+        throw new Error('not in a brace expression');
+    }
+    /* c8 ignore stop */
+    const ranges = [];
+    const negs = [];
+    let i = pos + 1;
+    let sawStart = false;
+    let uflag = false;
+    let escaping = false;
+    let negate = false;
+    let endPos = pos;
+    let rangeStart = '';
+    WHILE: while (i < glob.length) {
+        const c = glob.charAt(i);
+        if ((c === '!' || c === '^') && i === pos + 1) {
+            negate = true;
+            i++;
+            continue;
+        }
+        if (c === ']' && sawStart && !escaping) {
+            endPos = i + 1;
+            break;
+        }
+        sawStart = true;
+        if (c === '\\') {
+            if (!escaping) {
+                escaping = true;
+                i++;
+                continue;
+            }
+            // escaped \ char, fall through and treat like normal char
+        }
+        if (c === '[' && !escaping) {
+            // either a posix class, a collation equivalent, or just a [
+            for (const [cls, [unip, u, neg]] of Object.entries(posixClasses)) {
+                if (glob.startsWith(cls, i)) {
+                    // invalid, [a-[] is fine, but not [a-[:alpha]]
+                    if (rangeStart) {
+                        return ['$.', false, glob.length - pos];
+                    }
+                    i += cls.length;
+                    if (neg)
+                        negs.push(unip);
+                    else
+                        ranges.push(unip);
+                    uflag = uflag || u;
+                    continue WHILE;
+                }
+            }
+        }
+        // now it's just a normal character, effectively
+        escaping = false;
+        if (rangeStart) {
+            // throw this range away if it's not valid, but others
+            // can still match.
+            if (c > rangeStart) {
+                ranges.push(regExpEscape(rangeStart) + '-' + regExpEscape(c));
+            }
+            else if (c === rangeStart) {
+                ranges.push(regExpEscape(c));
+            }
+            rangeStart = '';
+            i++;
+            continue;
+        }
+        // now might be the start of a range.
+        // can be either c-d or c-] or c<more...>] or c] at this point
+        if (glob.startsWith('-]', i + 1)) {
+            ranges.push(regExpEscape(c + '-'));
+            i += 2;
+            continue;
+        }
+        if (glob.startsWith('-', i + 1)) {
+            rangeStart = c;
+            i += 2;
+            continue;
+        }
+        // not the start of a range, just a single character
+        ranges.push(regExpEscape(c));
+        i++;
+    }
+    if (endPos < i) {
+        // didn't see the end of the class, not a valid class,
+        // but might still be valid as a literal match.
+        return ['', false, 0];
+    }
+    // if we got no ranges and no negates, then we have a range that
+    // cannot possibly match anything, and that poisons the whole glob
+    if (!ranges.length && !negs.length) {
+        return ['$.', false, glob.length - pos];
+    }
+    const sranges = '[' + (negate ? '^' : '') + rangesToString(ranges) + ']';
+    const snegs = '[' + (negate ? '' : '^') + rangesToString(negs) + ']';
+    const comb = ranges.length && negs.length
+        ? '(' + sranges + '|' + snegs + ')'
+        : ranges.length
+            ? sranges
+            : snegs;
+    return [comb, uflag, endPos - pos];
+};
+exports.parseClass = parseClass;
+//# sourceMappingURL=brace-expressions.js.map
+
+/***/ }),
+
+/***/ 3355:
+/***/ (function(module, __unused_webpack_exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+const index_js_1 = __importDefault(__nccwpck_require__(266));
+module.exports = Object.assign(index_js_1.default, { default: index_js_1.default, minimatch: index_js_1.default });
+//# sourceMappingURL=index-cjs.js.map
+
+/***/ }),
+
+/***/ 266:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Minimatch = exports.match = exports.makeRe = exports.braceExpand = exports.defaults = exports.filter = exports.GLOBSTAR = exports.sep = exports.minimatch = void 0;
+const brace_expansion_1 = __importDefault(__nccwpck_require__(1046));
+const brace_expressions_js_1 = __nccwpck_require__(314);
+const minimatch = (p, pattern, options = {}) => {
+    assertValidPattern(pattern);
+    // shortcut: comments match nothing.
+    if (!options.nocomment && pattern.charAt(0) === '#') {
+        return false;
+    }
+    return new Minimatch(pattern, options).match(p);
+};
+exports.minimatch = minimatch;
+exports["default"] = exports.minimatch;
+// Optimized checking for the most common glob patterns.
+const starDotExtRE = /^\*+([^+@!?\*\[\(]*)$/;
+const starDotExtTest = (ext) => (f) => !f.startsWith('.') && f.endsWith(ext);
+const starDotExtTestDot = (ext) => (f) => f.endsWith(ext);
+const starDotExtTestNocase = (ext) => {
+    ext = ext.toLowerCase();
+    return (f) => !f.startsWith('.') && f.toLowerCase().endsWith(ext);
+};
+const starDotExtTestNocaseDot = (ext) => {
+    ext = ext.toLowerCase();
+    return (f) => f.toLowerCase().endsWith(ext);
+};
+const starDotStarRE = /^\*+\.\*+$/;
+const starDotStarTest = (f) => !f.startsWith('.') && f.includes('.');
+const starDotStarTestDot = (f) => f !== '.' && f !== '..' && f.includes('.');
+const dotStarRE = /^\.\*+$/;
+const dotStarTest = (f) => f !== '.' && f !== '..' && f.startsWith('.');
+const starRE = /^\*+$/;
+const starTest = (f) => f.length !== 0 && !f.startsWith('.');
+const starTestDot = (f) => f.length !== 0 && f !== '.' && f !== '..';
+const qmarksRE = /^\?+([^+@!?\*\[\(]*)?$/;
+const qmarksTestNocase = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExt([$0]);
+    if (!ext)
+        return noext;
+    ext = ext.toLowerCase();
+    return (f) => noext(f) && f.toLowerCase().endsWith(ext);
+};
+const qmarksTestNocaseDot = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExtDot([$0]);
+    if (!ext)
+        return noext;
+    ext = ext.toLowerCase();
+    return (f) => noext(f) && f.toLowerCase().endsWith(ext);
+};
+const qmarksTestDot = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExtDot([$0]);
+    return !ext ? noext : (f) => noext(f) && f.endsWith(ext);
+};
+const qmarksTest = ([$0, ext = '']) => {
+    const noext = qmarksTestNoExt([$0]);
+    return !ext ? noext : (f) => noext(f) && f.endsWith(ext);
+};
+const qmarksTestNoExt = ([$0]) => {
+    const len = $0.length;
+    return (f) => f.length === len && !f.startsWith('.');
+};
+const qmarksTestNoExtDot = ([$0]) => {
+    const len = $0.length;
+    return (f) => f.length === len && f !== '.' && f !== '..';
+};
+/* c8 ignore start */
+const defaultPlatform = (typeof process === 'object' && process
+    ? (typeof process.env === 'object' &&
+        process.env &&
+        process.env.__MINIMATCH_TESTING_PLATFORM__) ||
+        process.platform
+    : 'posix');
+const path = {
+    win32: { sep: '\\' },
+    posix: { sep: '/' },
+};
+/* c8 ignore stop */
+exports.sep = defaultPlatform === 'win32' ? path.win32.sep : path.posix.sep;
+exports.minimatch.sep = exports.sep;
+exports.GLOBSTAR = Symbol('globstar **');
+exports.minimatch.GLOBSTAR = exports.GLOBSTAR;
+const plTypes = {
+    '!': { open: '(?:(?!(?:', close: '))[^/]*?)' },
+    '?': { open: '(?:', close: ')?' },
+    '+': { open: '(?:', close: ')+' },
+    '*': { open: '(?:', close: ')*' },
+    '@': { open: '(?:', close: ')' },
+};
+// any single thing other than /
+// don't need to escape / when using new RegExp()
+const qmark = '[^/]';
+// * => any number of characters
+const star = qmark + '*?';
+// ** when dots are allowed.  Anything goes, except .. and .
+// not (^ or / followed by one or two dots followed by $ or /),
+// followed by anything, any number of times.
+const twoStarDot = '(?:(?!(?:\\/|^)(?:\\.{1,2})($|\\/)).)*?';
+// not a ^ or / followed by a dot,
+// followed by anything, any number of times.
+const twoStarNoDot = '(?:(?!(?:\\/|^)\\.).)*?';
+// "abc" -> { a:true, b:true, c:true }
+const charSet = (s) => s.split('').reduce((set, c) => {
+    set[c] = true;
+    return set;
+}, {});
+// characters that need to be escaped in RegExp.
+const reSpecials = charSet('().*{}+?[]^$\\!');
+// characters that indicate we have to add the pattern start
+const addPatternStartSet = charSet('[.(');
+const filter = (pattern, options = {}) => (p) => (0, exports.minimatch)(p, pattern, options);
+exports.filter = filter;
+exports.minimatch.filter = exports.filter;
+const ext = (a, b = {}) => Object.assign({}, a, b);
+const defaults = (def) => {
+    if (!def || typeof def !== 'object' || !Object.keys(def).length) {
+        return exports.minimatch;
+    }
+    const orig = exports.minimatch;
+    const m = (p, pattern, options = {}) => orig(p, pattern, ext(def, options));
+    return Object.assign(m, {
+        Minimatch: class Minimatch extends orig.Minimatch {
+            constructor(pattern, options = {}) {
+                super(pattern, ext(def, options));
+            }
+            static defaults(options) {
+                return orig.defaults(ext(def, options)).Minimatch;
+            }
+        },
+        filter: (pattern, options = {}) => orig.filter(pattern, ext(def, options)),
+        defaults: (options) => orig.defaults(ext(def, options)),
+        makeRe: (pattern, options = {}) => orig.makeRe(pattern, ext(def, options)),
+        braceExpand: (pattern, options = {}) => orig.braceExpand(pattern, ext(def, options)),
+        match: (list, pattern, options = {}) => orig.match(list, pattern, ext(def, options)),
+        sep: orig.sep,
+        GLOBSTAR: exports.GLOBSTAR,
+    });
+};
+exports.defaults = defaults;
+exports.minimatch.defaults = exports.defaults;
+// Brace expansion:
+// a{b,c}d -> abd acd
+// a{b,}c -> abc ac
+// a{0..3}d -> a0d a1d a2d a3d
+// a{b,c{d,e}f}g -> abg acdfg acefg
+// a{b,c}d{e,f}g -> abdeg acdeg abdeg abdfg
+//
+// Invalid sets are not expanded.
+// a{2..}b -> a{2..}b
+// a{b}c -> a{b}c
+const braceExpand = (pattern, options = {}) => {
+    assertValidPattern(pattern);
+    // Thanks to Yeting Li <https://github.com/yetingli> for
+    // improving this regexp to avoid a ReDOS vulnerability.
+    if (options.nobrace || !/\{(?:(?!\{).)*\}/.test(pattern)) {
+        // shortcut. no need to expand.
+        return [pattern];
+    }
+    return (0, brace_expansion_1.default)(pattern);
+};
+exports.braceExpand = braceExpand;
+exports.minimatch.braceExpand = exports.braceExpand;
+const MAX_PATTERN_LENGTH = 1024 * 64;
+const assertValidPattern = (pattern) => {
+    if (typeof pattern !== 'string') {
+        throw new TypeError('invalid pattern');
+    }
+    if (pattern.length > MAX_PATTERN_LENGTH) {
+        throw new TypeError('pattern is too long');
+    }
+};
+// parse a component of the expanded set.
+// At this point, no pattern may contain "/" in it
+// so we're going to return a 2d array, where each entry is the full
+// pattern, split on '/', and then turned into a regular expression.
+// A regexp is made at the end which joins each array with an
+// escaped /, and another full one which joins each regexp with |.
+//
+// Following the lead of Bash 4.1, note that "**" only has special meaning
+// when it is the *only* thing in a path portion.  Otherwise, any series
+// of * is equivalent to a single *.  Globstar behavior is enabled by
+// default, and can be disabled by setting options.noglobstar.
+const makeRe = (pattern, options = {}) => new Minimatch(pattern, options).makeRe();
+exports.makeRe = makeRe;
+exports.minimatch.makeRe = exports.makeRe;
+const match = (list, pattern, options = {}) => {
+    const mm = new Minimatch(pattern, options);
+    list = list.filter(f => mm.match(f));
+    if (mm.options.nonull && !list.length) {
+        list.push(pattern);
+    }
+    return list;
+};
+exports.match = match;
+exports.minimatch.match = exports.match;
+// replace stuff like \* with *
+const globUnescape = (s) => s.replace(/\\(.)/g, '$1');
+const globMagic = /[?*]|[+@!]\(.*?\)|\[|\]/;
+const regExpEscape = (s) => s.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+class Minimatch {
+    options;
+    set;
+    pattern;
+    windowsPathsNoEscape;
+    nonegate;
+    negate;
+    comment;
+    empty;
+    preserveMultipleSlashes;
+    partial;
+    globSet;
+    globParts;
+    nocase;
+    isWindows;
+    platform;
+    windowsNoMagicRoot;
+    regexp;
+    constructor(pattern, options = {}) {
+        assertValidPattern(pattern);
+        options = options || {};
+        this.options = options;
+        this.pattern = pattern;
+        this.platform = options.platform || defaultPlatform;
+        this.isWindows = this.platform === 'win32';
+        this.windowsPathsNoEscape =
+            !!options.windowsPathsNoEscape || options.allowWindowsEscape === false;
+        if (this.windowsPathsNoEscape) {
+            this.pattern = this.pattern.replace(/\\/g, '/');
+        }
+        this.preserveMultipleSlashes = !!options.preserveMultipleSlashes;
+        this.regexp = null;
+        this.negate = false;
+        this.nonegate = !!options.nonegate;
+        this.comment = false;
+        this.empty = false;
+        this.partial = !!options.partial;
+        this.nocase = !!this.options.nocase;
+        this.windowsNoMagicRoot =
+            options.windowsNoMagicRoot !== undefined
+                ? options.windowsNoMagicRoot
+                : !!(this.isWindows && this.nocase);
+        this.globSet = [];
+        this.globParts = [];
+        this.set = [];
+        // make the set of regexps etc.
+        this.make();
+    }
+    debug(..._) { }
+    make() {
+        const pattern = this.pattern;
+        const options = this.options;
+        // empty patterns and comments match nothing.
+        if (!options.nocomment && pattern.charAt(0) === '#') {
+            this.comment = true;
+            return;
+        }
+        if (!pattern) {
+            this.empty = true;
+            return;
+        }
+        // step 1: figure out negation, etc.
+        this.parseNegate();
+        // step 2: expand braces
+        this.globSet = [...new Set(this.braceExpand())];
+        if (options.debug) {
+            this.debug = (...args) => console.error(...args);
+        }
+        this.debug(this.pattern, this.globSet);
+        // step 3: now we have a set, so turn each one into a series of
+        // path-portion matching patterns.
+        // These will be regexps, except in the case of "**", which is
+        // set to the GLOBSTAR object for globstar behavior,
+        // and will not contain any / characters
+        //
+        // First, we preprocess to make the glob pattern sets a bit simpler
+        // and deduped.  There are some perf-killing patterns that can cause
+        // problems with a glob walk, but we can simplify them down a bit.
+        const rawGlobParts = this.globSet.map(s => this.slashSplit(s));
+        this.globParts = this.preprocess(rawGlobParts);
+        this.debug(this.pattern, this.globParts);
+        // glob --> regexps
+        let set = this.globParts.map((s, _, __) => {
+            if (this.isWindows && this.windowsNoMagicRoot) {
+                // check if it's a drive or unc path.
+                const isUNC = s[0] === '' &&
+                    s[1] === '' &&
+                    (s[2] === '?' || !globMagic.test(s[2])) &&
+                    !globMagic.test(s[3]);
+                const isDrive = /^[a-z]:/i.test(s[0]);
+                if (isUNC) {
+                    return [...s.slice(0, 4), ...s.slice(4).map(ss => this.parse(ss))];
+                }
+                else if (isDrive) {
+                    return [s[0], ...s.slice(1).map(ss => this.parse(ss))];
+                }
+            }
+            return s.map(ss => this.parse(ss));
+        });
+        this.debug(this.pattern, set);
+        // filter out everything that didn't compile properly.
+        this.set = set.filter(s => s.indexOf(false) === -1);
+        // do not treat the ? in UNC paths as magic
+        if (this.isWindows) {
+            for (let i = 0; i < this.set.length; i++) {
+                const p = this.set[i];
+                if (p[0] === '' &&
+                    p[1] === '' &&
+                    this.globParts[i][2] === '?' &&
+                    typeof p[3] === 'string' &&
+                    /^[a-z]:$/i.test(p[3])) {
+                    p[2] = '?';
+                }
+            }
+        }
+        this.debug(this.pattern, this.set);
+    }
+    // various transforms to equivalent pattern sets that are
+    // faster to process in a filesystem walk.  The goal is to
+    // eliminate what we can, and push all ** patterns as far
+    // to the right as possible, even if it increases the number
+    // of patterns that we have to process.
+    preprocess(globParts) {
+        // if we're not in globstar mode, then turn all ** into *
+        if (this.options.noglobstar) {
+            for (let i = 0; i < globParts.length; i++) {
+                for (let j = 0; j < globParts[i].length; j++) {
+                    if (globParts[i][j] === '**') {
+                        globParts[i][j] = '*';
+                    }
+                }
+            }
+        }
+        const { optimizationLevel = 1 } = this.options;
+        if (optimizationLevel >= 2) {
+            // aggressive optimization for the purpose of fs walking
+            globParts = this.firstPhasePreProcess(globParts);
+            globParts = this.secondPhasePreProcess(globParts);
+        }
+        else if (optimizationLevel >= 1) {
+            // just basic optimizations to remove some .. parts
+            globParts = this.levelOneOptimize(globParts);
+        }
+        else {
+            globParts = this.adjascentGlobstarOptimize(globParts);
+        }
+        return globParts;
+    }
+    // just get rid of adjascent ** portions
+    adjascentGlobstarOptimize(globParts) {
+        return globParts.map(parts => {
+            let gs = -1;
+            while (-1 !== (gs = parts.indexOf('**', gs + 1))) {
+                let i = gs;
+                while (parts[i + 1] === '**') {
+                    i++;
+                }
+                if (i !== gs) {
+                    parts.splice(gs, i - gs);
+                }
+            }
+            return parts;
+        });
+    }
+    // get rid of adjascent ** and resolve .. portions
+    levelOneOptimize(globParts) {
+        return globParts.map(parts => {
+            parts = parts.reduce((set, part) => {
+                const prev = set[set.length - 1];
+                if (part === '**' && prev === '**') {
+                    return set;
+                }
+                if (part === '..') {
+                    if (prev && prev !== '..' && prev !== '.' && prev !== '**') {
+                        set.pop();
+                        return set;
+                    }
+                }
+                set.push(part);
+                return set;
+            }, []);
+            return parts.length === 0 ? [''] : parts;
+        });
+    }
+    levelTwoFileOptimize(parts) {
+        if (!Array.isArray(parts)) {
+            parts = this.slashSplit(parts);
+        }
+        let didSomething = false;
+        do {
+            didSomething = false;
+            // <pre>/<e>/<rest> -> <pre>/<rest>
+            if (!this.preserveMultipleSlashes) {
+                for (let i = 1; i < parts.length - 1; i++) {
+                    const p = parts[i];
+                    // don't squeeze out UNC patterns
+                    if (i === 1 && p === '' && parts[0] === '')
+                        continue;
+                    if (p === '.' || p === '') {
+                        didSomething = true;
+                        parts.splice(i, 1);
+                        i--;
+                    }
+                }
+                if (parts[0] === '.' &&
+                    parts.length === 2 &&
+                    (parts[1] === '.' || parts[1] === '')) {
+                    didSomething = true;
+                    parts.pop();
+                }
+            }
+            // <pre>/<p>/../<rest> -> <pre>/<rest>
+            let dd = 0;
+            while (-1 !== (dd = parts.indexOf('..', dd + 1))) {
+                const p = parts[dd - 1];
+                if (p && p !== '.' && p !== '..' && p !== '**') {
+                    didSomething = true;
+                    parts.splice(dd - 1, 2);
+                    dd -= 2;
+                }
+            }
+        } while (didSomething);
+        return parts.length === 0 ? [''] : parts;
+    }
+    // First phase: single-pattern processing
+    // <pre> is 1 or more portions
+    // <rest> is 1 or more portions
+    // <p> is any portion other than ., .., '', or **
+    // <e> is . or ''
+    //
+    // **/.. is *brutal* for filesystem walking performance, because
+    // it effectively resets the recursive walk each time it occurs,
+    // and ** cannot be reduced out by a .. pattern part like a regexp
+    // or most strings (other than .., ., and '') can be.
+    //
+    // <pre>/**/../<p>/<p>/<rest> -> {<pre>/../<p>/<p>/<rest>,<pre>/**/<p>/<p>/<rest>}
+    // <pre>/<e>/<rest> -> <pre>/<rest>
+    // <pre>/<p>/../<rest> -> <pre>/<rest>
+    // **/**/<rest> -> **/<rest>
+    //
+    // **/*/<rest> -> */**/<rest> <== not valid because ** doesn't follow
+    // this WOULD be allowed if ** did follow symlinks, or * didn't
+    firstPhasePreProcess(globParts) {
+        let didSomething = false;
+        do {
+            didSomething = false;
+            // <pre>/**/../<p>/<p>/<rest> -> {<pre>/../<p>/<p>/<rest>,<pre>/**/<p>/<p>/<rest>}
+            for (let parts of globParts) {
+                let gs = -1;
+                while (-1 !== (gs = parts.indexOf('**', gs + 1))) {
+                    let gss = gs;
+                    while (parts[gss + 1] === '**') {
+                        // <pre>/**/**/<rest> -> <pre>/**/<rest>
+                        gss++;
+                    }
+                    // eg, if gs is 2 and gss is 4, that means we have 3 **
+                    // parts, and can remove 2 of them.
+                    if (gss > gs) {
+                        parts.splice(gs + 1, gss - gs);
+                    }
+                    let next = parts[gs + 1];
+                    const p = parts[gs + 2];
+                    const p2 = parts[gs + 3];
+                    if (next !== '..')
+                        continue;
+                    if (!p ||
+                        p === '.' ||
+                        p === '..' ||
+                        !p2 ||
+                        p2 === '.' ||
+                        p2 === '..') {
+                        continue;
+                    }
+                    didSomething = true;
+                    // edit parts in place, and push the new one
+                    parts.splice(gs, 1);
+                    const other = parts.slice(0);
+                    other[gs] = '**';
+                    globParts.push(other);
+                    gs--;
+                }
+                // <pre>/<e>/<rest> -> <pre>/<rest>
+                if (!this.preserveMultipleSlashes) {
+                    for (let i = 1; i < parts.length - 1; i++) {
+                        const p = parts[i];
+                        // don't squeeze out UNC patterns
+                        if (i === 1 && p === '' && parts[0] === '')
+                            continue;
+                        if (p === '.' || p === '') {
+                            didSomething = true;
+                            parts.splice(i, 1);
+                            i--;
+                        }
+                    }
+                    if (parts[0] === '.' &&
+                        parts.length === 2 &&
+                        (parts[1] === '.' || parts[1] === '')) {
+                        didSomething = true;
+                        parts.pop();
+                    }
+                }
+                // <pre>/<p>/../<rest> -> <pre>/<rest>
+                let dd = 0;
+                while (-1 !== (dd = parts.indexOf('..', dd + 1))) {
+                    const p = parts[dd - 1];
+                    if (p && p !== '.' && p !== '..' && p !== '**') {
+                        didSomething = true;
+                        const needDot = dd === 1 && parts[dd + 1] === '**';
+                        const splin = needDot ? ['.'] : [];
+                        parts.splice(dd - 1, 2, ...splin);
+                        if (parts.length === 0)
+                            parts.push('');
+                        dd -= 2;
+                    }
+                }
+            }
+        } while (didSomething);
+        return globParts;
+    }
+    // second phase: multi-pattern dedupes
+    // {<pre>/*/<rest>,<pre>/<p>/<rest>} -> <pre>/*/<rest>
+    // {<pre>/<rest>,<pre>/<rest>} -> <pre>/<rest>
+    // {<pre>/**/<rest>,<pre>/<rest>} -> <pre>/**/<rest>
+    //
+    // {<pre>/**/<rest>,<pre>/**/<p>/<rest>} -> <pre>/**/<rest>
+    // ^-- not valid because ** doens't follow symlinks
+    secondPhasePreProcess(globParts) {
+        for (let i = 0; i < globParts.length - 1; i++) {
+            for (let j = i + 1; j < globParts.length; j++) {
+                const matched = this.partsMatch(globParts[i], globParts[j], !this.preserveMultipleSlashes);
+                if (!matched)
+                    continue;
+                globParts[i] = matched;
+                globParts[j] = [];
+            }
+        }
+        return globParts.filter(gs => gs.length);
+    }
+    partsMatch(a, b, emptyGSMatch = false) {
+        let ai = 0;
+        let bi = 0;
+        let result = [];
+        let which = '';
+        while (ai < a.length && bi < b.length) {
+            if (a[ai] === b[bi]) {
+                result.push(which === 'b' ? b[bi] : a[ai]);
+                ai++;
+                bi++;
+            }
+            else if (emptyGSMatch && a[ai] === '**' && b[bi] === a[ai + 1]) {
+                result.push(a[ai]);
+                ai++;
+            }
+            else if (emptyGSMatch && b[bi] === '**' && a[ai] === b[bi + 1]) {
+                result.push(b[bi]);
+                bi++;
+            }
+            else if (a[ai] === '*' &&
+                b[bi] &&
+                (this.options.dot || !b[bi].startsWith('.')) &&
+                b[bi] !== '**') {
+                if (which === 'b')
+                    return false;
+                which = 'a';
+                result.push(a[ai]);
+                ai++;
+                bi++;
+            }
+            else if (b[bi] === '*' &&
+                a[ai] &&
+                (this.options.dot || !a[ai].startsWith('.')) &&
+                a[ai] !== '**') {
+                if (which === 'a')
+                    return false;
+                which = 'b';
+                result.push(b[bi]);
+                ai++;
+                bi++;
+            }
+            else {
+                return false;
+            }
+        }
+        // if we fall out of the loop, it means they two are identical
+        // as long as their lengths match
+        return a.length === b.length && result;
+    }
+    parseNegate() {
+        if (this.nonegate)
+            return;
+        const pattern = this.pattern;
+        let negate = false;
+        let negateOffset = 0;
+        for (let i = 0; i < pattern.length && pattern.charAt(i) === '!'; i++) {
+            negate = !negate;
+            negateOffset++;
+        }
+        if (negateOffset)
+            this.pattern = pattern.slice(negateOffset);
+        this.negate = negate;
+    }
+    // set partial to true to test if, for example,
+    // "/a/b" matches the start of "/*/b/*/d"
+    // Partial means, if you run out of file before you run
+    // out of pattern, then that's fine, as long as all
+    // the parts match.
+    matchOne(file, pattern, partial = false) {
+        const options = this.options;
+        // a UNC pattern like //?/c:/* can match a path like c:/x
+        // and vice versa
+        if (this.isWindows) {
+            const fileUNC = file[0] === '' &&
+                file[1] === '' &&
+                file[2] === '?' &&
+                typeof file[3] === 'string' &&
+                /^[a-z]:$/i.test(file[3]);
+            const patternUNC = pattern[0] === '' &&
+                pattern[1] === '' &&
+                pattern[2] === '?' &&
+                typeof pattern[3] === 'string' &&
+                /^[a-z]:$/i.test(pattern[3]);
+            if (fileUNC && patternUNC) {
+                const fd = file[3];
+                const pd = pattern[3];
+                if (fd.toLowerCase() === pd.toLowerCase()) {
+                    file[3] = pd;
+                }
+            }
+            else if (patternUNC && typeof file[0] === 'string') {
+                const pd = pattern[3];
+                const fd = file[0];
+                if (pd.toLowerCase() === fd.toLowerCase()) {
+                    pattern[3] = fd;
+                    pattern = pattern.slice(3);
+                }
+            }
+            else if (fileUNC && typeof pattern[0] === 'string') {
+                const fd = file[3];
+                if (fd.toLowerCase() === pattern[0].toLowerCase()) {
+                    pattern[0] = fd;
+                    file = file.slice(3);
+                }
+            }
+        }
+        // resolve and reduce . and .. portions in the file as well.
+        // dont' need to do the second phase, because it's only one string[]
+        const { optimizationLevel = 1 } = this.options;
+        if (optimizationLevel >= 2) {
+            file = this.levelTwoFileOptimize(file);
+        }
+        this.debug('matchOne', this, { file, pattern });
+        this.debug('matchOne', file.length, pattern.length);
+        for (var fi = 0, pi = 0, fl = file.length, pl = pattern.length; fi < fl && pi < pl; fi++, pi++) {
+            this.debug('matchOne loop');
+            var p = pattern[pi];
+            var f = file[fi];
+            this.debug(pattern, p, f);
+            // should be impossible.
+            // some invalid regexp stuff in the set.
+            /* c8 ignore start */
+            if (p === false) {
+                return false;
+            }
+            /* c8 ignore stop */
+            if (p === exports.GLOBSTAR) {
+                this.debug('GLOBSTAR', [pattern, p, f]);
+                // "**"
+                // a/**/b/**/c would match the following:
+                // a/b/x/y/z/c
+                // a/x/y/z/b/c
+                // a/b/x/b/x/c
+                // a/b/c
+                // To do this, take the rest of the pattern after
+                // the **, and see if it would match the file remainder.
+                // If so, return success.
+                // If not, the ** "swallows" a segment, and try again.
+                // This is recursively awful.
+                //
+                // a/**/b/**/c matching a/b/x/y/z/c
+                // - a matches a
+                // - doublestar
+                //   - matchOne(b/x/y/z/c, b/**/c)
+                //     - b matches b
+                //     - doublestar
+                //       - matchOne(x/y/z/c, c) -> no
+                //       - matchOne(y/z/c, c) -> no
+                //       - matchOne(z/c, c) -> no
+                //       - matchOne(c, c) yes, hit
+                var fr = fi;
+                var pr = pi + 1;
+                if (pr === pl) {
+                    this.debug('** at the end');
+                    // a ** at the end will just swallow the rest.
+                    // We have found a match.
+                    // however, it will not swallow /.x, unless
+                    // options.dot is set.
+                    // . and .. are *never* matched by **, for explosively
+                    // exponential reasons.
+                    for (; fi < fl; fi++) {
+                        if (file[fi] === '.' ||
+                            file[fi] === '..' ||
+                            (!options.dot && file[fi].charAt(0) === '.'))
+                            return false;
+                    }
+                    return true;
+                }
+                // ok, let's see if we can swallow whatever we can.
+                while (fr < fl) {
+                    var swallowee = file[fr];
+                    this.debug('\nglobstar while', file, fr, pattern, pr, swallowee);
+                    // XXX remove this slice.  Just pass the start index.
+                    if (this.matchOne(file.slice(fr), pattern.slice(pr), partial)) {
+                        this.debug('globstar found match!', fr, fl, swallowee);
+                        // found a match.
+                        return true;
+                    }
+                    else {
+                        // can't swallow "." or ".." ever.
+                        // can only swallow ".foo" when explicitly asked.
+                        if (swallowee === '.' ||
+                            swallowee === '..' ||
+                            (!options.dot && swallowee.charAt(0) === '.')) {
+                            this.debug('dot detected!', file, fr, pattern, pr);
+                            break;
+                        }
+                        // ** swallows a segment, and continue.
+                        this.debug('globstar swallow a segment, and continue');
+                        fr++;
+                    }
+                }
+                // no match was found.
+                // However, in partial mode, we can't say this is necessarily over.
+                /* c8 ignore start */
+                if (partial) {
+                    // ran out of file
+                    this.debug('\n>>> no match, partial?', file, fr, pattern, pr);
+                    if (fr === fl) {
+                        return true;
+                    }
+                }
+                /* c8 ignore stop */
+                return false;
+            }
+            // something other than **
+            // non-magic patterns just have to match exactly
+            // patterns with magic have been turned into regexps.
+            let hit;
+            if (typeof p === 'string') {
+                hit = f === p;
+                this.debug('string match', p, f, hit);
+            }
+            else {
+                hit = p.test(f);
+                this.debug('pattern match', p, f, hit);
+            }
+            if (!hit)
+                return false;
+        }
+        // Note: ending in / means that we'll get a final ""
+        // at the end of the pattern.  This can only match a
+        // corresponding "" at the end of the file.
+        // If the file ends in /, then it can only match a
+        // a pattern that ends in /, unless the pattern just
+        // doesn't have any more for it. But, a/b/ should *not*
+        // match "a/b/*", even though "" matches against the
+        // [^/]*? pattern, except in partial mode, where it might
+        // simply not be reached yet.
+        // However, a/b/ should still satisfy a/*
+        // now either we fell off the end of the pattern, or we're done.
+        if (fi === fl && pi === pl) {
+            // ran out of pattern and filename at the same time.
+            // an exact hit!
+            return true;
+        }
+        else if (fi === fl) {
+            // ran out of file, but still had pattern left.
+            // this is ok if we're doing the match as part of
+            // a glob fs traversal.
+            return partial;
+        }
+        else if (pi === pl) {
+            // ran out of pattern, still have file left.
+            // this is only acceptable if we're on the very last
+            // empty segment of a file with a trailing slash.
+            // a/* should match a/b/
+            return fi === fl - 1 && file[fi] === '';
+            /* c8 ignore start */
+        }
+        else {
+            // should be unreachable.
+            throw new Error('wtf?');
+        }
+        /* c8 ignore stop */
+    }
+    braceExpand() {
+        return (0, exports.braceExpand)(this.pattern, this.options);
+    }
+    parse(pattern) {
+        assertValidPattern(pattern);
+        const options = this.options;
+        // shortcuts
+        if (pattern === '**')
+            return exports.GLOBSTAR;
+        if (pattern === '')
+            return '';
+        // far and away, the most common glob pattern parts are
+        // *, *.*, and *.<ext>  Add a fast check method for those.
+        let m;
+        let fastTest = null;
+        if ((m = pattern.match(starRE))) {
+            fastTest = options.dot ? starTestDot : starTest;
+        }
+        else if ((m = pattern.match(starDotExtRE))) {
+            fastTest = (options.nocase
+                ? options.dot
+                    ? starDotExtTestNocaseDot
+                    : starDotExtTestNocase
+                : options.dot
+                    ? starDotExtTestDot
+                    : starDotExtTest)(m[1]);
+        }
+        else if ((m = pattern.match(qmarksRE))) {
+            fastTest = (options.nocase
+                ? options.dot
+                    ? qmarksTestNocaseDot
+                    : qmarksTestNocase
+                : options.dot
+                    ? qmarksTestDot
+                    : qmarksTest)(m);
+        }
+        else if ((m = pattern.match(starDotStarRE))) {
+            fastTest = options.dot ? starDotStarTestDot : starDotStarTest;
+        }
+        else if ((m = pattern.match(dotStarRE))) {
+            fastTest = dotStarTest;
+        }
+        let re = '';
+        let hasMagic = false;
+        let escaping = false;
+        // ? => one single character
+        const patternListStack = [];
+        const negativeLists = [];
+        let stateChar = false;
+        let uflag = false;
+        let pl;
+        // . and .. never match anything that doesn't start with .,
+        // even when options.dot is set.  However, if the pattern
+        // starts with ., then traversal patterns can match.
+        let dotTravAllowed = pattern.charAt(0) === '.';
+        let dotFileAllowed = options.dot || dotTravAllowed;
+        const patternStart = () => dotTravAllowed
+            ? ''
+            : dotFileAllowed
+                ? '(?!(?:^|\\/)\\.{1,2}(?:$|\\/))'
+                : '(?!\\.)';
+        const subPatternStart = (p) => p.charAt(0) === '.'
+            ? ''
+            : options.dot
+                ? '(?!(?:^|\\/)\\.{1,2}(?:$|\\/))'
+                : '(?!\\.)';
+        const clearStateChar = () => {
+            if (stateChar) {
+                // we had some state-tracking character
+                // that wasn't consumed by this pass.
+                switch (stateChar) {
+                    case '*':
+                        re += star;
+                        hasMagic = true;
+                        break;
+                    case '?':
+                        re += qmark;
+                        hasMagic = true;
+                        break;
+                    default:
+                        re += '\\' + stateChar;
+                        break;
+                }
+                this.debug('clearStateChar %j %j', stateChar, re);
+                stateChar = false;
+            }
+        };
+        for (let i = 0, c; i < pattern.length && (c = pattern.charAt(i)); i++) {
+            this.debug('%s\t%s %s %j', pattern, i, re, c);
+            // skip over any that are escaped.
+            if (escaping) {
+                // completely not allowed, even escaped.
+                // should be impossible.
+                /* c8 ignore start */
+                if (c === '/') {
+                    return false;
+                }
+                /* c8 ignore stop */
+                if (reSpecials[c]) {
+                    re += '\\';
+                }
+                re += c;
+                escaping = false;
+                continue;
+            }
+            switch (c) {
+                // Should already be path-split by now.
+                /* c8 ignore start */
+                case '/': {
+                    return false;
+                }
+                /* c8 ignore stop */
+                case '\\':
+                    clearStateChar();
+                    escaping = true;
+                    continue;
+                // the various stateChar values
+                // for the "extglob" stuff.
+                case '?':
+                case '*':
+                case '+':
+                case '@':
+                case '!':
+                    this.debug('%s\t%s %s %j <-- stateChar', pattern, i, re, c);
+                    // if we already have a stateChar, then it means
+                    // that there was something like ** or +? in there.
+                    // Handle the stateChar, then proceed with this one.
+                    this.debug('call clearStateChar %j', stateChar);
+                    clearStateChar();
+                    stateChar = c;
+                    // if extglob is disabled, then +(asdf|foo) isn't a thing.
+                    // just clear the statechar *now*, rather than even diving into
+                    // the patternList stuff.
+                    if (options.noext)
+                        clearStateChar();
+                    continue;
+                case '(': {
+                    if (!stateChar) {
+                        re += '\\(';
+                        continue;
+                    }
+                    const plEntry = {
+                        type: stateChar,
+                        start: i - 1,
+                        reStart: re.length,
+                        open: plTypes[stateChar].open,
+                        close: plTypes[stateChar].close,
+                    };
+                    this.debug(this.pattern, '\t', plEntry);
+                    patternListStack.push(plEntry);
+                    // negation is (?:(?!(?:js)(?:<rest>))[^/]*)
+                    re += plEntry.open;
+                    // next entry starts with a dot maybe?
+                    if (plEntry.start === 0 && plEntry.type !== '!') {
+                        dotTravAllowed = true;
+                        re += subPatternStart(pattern.slice(i + 1));
+                    }
+                    this.debug('plType %j %j', stateChar, re);
+                    stateChar = false;
+                    continue;
+                }
+                case ')': {
+                    const plEntry = patternListStack[patternListStack.length - 1];
+                    if (!plEntry) {
+                        re += '\\)';
+                        continue;
+                    }
+                    patternListStack.pop();
+                    // closing an extglob
+                    clearStateChar();
+                    hasMagic = true;
+                    pl = plEntry;
+                    // negation is (?:(?!js)[^/]*)
+                    // The others are (?:<pattern>)<type>
+                    re += pl.close;
+                    if (pl.type === '!') {
+                        negativeLists.push(Object.assign(pl, { reEnd: re.length }));
+                    }
+                    continue;
+                }
+                case '|': {
+                    const plEntry = patternListStack[patternListStack.length - 1];
+                    if (!plEntry) {
+                        re += '\\|';
+                        continue;
+                    }
+                    clearStateChar();
+                    re += '|';
+                    // next subpattern can start with a dot?
+                    if (plEntry.start === 0 && plEntry.type !== '!') {
+                        dotTravAllowed = true;
+                        re += subPatternStart(pattern.slice(i + 1));
+                    }
+                    continue;
+                }
+                // these are mostly the same in regexp and glob
+                case '[':
+                    // swallow any state-tracking char before the [
+                    clearStateChar();
+                    const [src, needUflag, consumed] = (0, brace_expressions_js_1.parseClass)(pattern, i);
+                    if (consumed) {
+                        re += src;
+                        uflag = uflag || needUflag;
+                        i += consumed - 1;
+                        hasMagic = true;
+                    }
+                    else {
+                        re += '\\[';
+                    }
+                    continue;
+                case ']':
+                    re += '\\' + c;
+                    continue;
+                default:
+                    // swallow any state char that wasn't consumed
+                    clearStateChar();
+                    re += regExpEscape(c);
+                    break;
+            } // switch
+        } // for
+        // handle the case where we had a +( thing at the *end*
+        // of the pattern.
+        // each pattern list stack adds 3 chars, and we need to go through
+        // and escape any | chars that were passed through as-is for the regexp.
+        // Go through and escape them, taking care not to double-escape any
+        // | chars that were already escaped.
+        for (pl = patternListStack.pop(); pl; pl = patternListStack.pop()) {
+            let tail;
+            tail = re.slice(pl.reStart + pl.open.length);
+            this.debug(this.pattern, 'setting tail', re, pl);
+            // maybe some even number of \, then maybe 1 \, followed by a |
+            tail = tail.replace(/((?:\\{2}){0,64})(\\?)\|/g, (_, $1, $2) => {
+                if (!$2) {
+                    // the | isn't already escaped, so escape it.
+                    $2 = '\\';
+                    // should already be done
+                    /* c8 ignore start */
+                }
+                /* c8 ignore stop */
+                // need to escape all those slashes *again*, without escaping the
+                // one that we need for escaping the | character.  As it works out,
+                // escaping an even number of slashes can be done by simply repeating
+                // it exactly after itself.  That's why this trick works.
+                //
+                // I am sorry that you have to see this.
+                return $1 + $1 + $2 + '|';
+            });
+            this.debug('tail=%j\n   %s', tail, tail, pl, re);
+            const t = pl.type === '*' ? star : pl.type === '?' ? qmark : '\\' + pl.type;
+            hasMagic = true;
+            re = re.slice(0, pl.reStart) + t + '\\(' + tail;
+        }
+        // handle trailing things that only matter at the very end.
+        clearStateChar();
+        if (escaping) {
+            // trailing \\
+            re += '\\\\';
+        }
+        // only need to apply the nodot start if the re starts with
+        // something that could conceivably capture a dot
+        const addPatternStart = addPatternStartSet[re.charAt(0)];
+        // Hack to work around lack of negative lookbehind in JS
+        // A pattern like: *.!(x).!(y|z) needs to ensure that a name
+        // like 'a.xyz.yz' doesn't match.  So, the first negative
+        // lookahead, has to look ALL the way ahead, to the end of
+        // the pattern.
+        for (let n = negativeLists.length - 1; n > -1; n--) {
+            const nl = negativeLists[n];
+            const nlBefore = re.slice(0, nl.reStart);
+            const nlFirst = re.slice(nl.reStart, nl.reEnd - 8);
+            let nlAfter = re.slice(nl.reEnd);
+            const nlLast = re.slice(nl.reEnd - 8, nl.reEnd) + nlAfter;
+            // Handle nested stuff like *(*.js|!(*.json)), where open parens
+            // mean that we should *not* include the ) in the bit that is considered
+            // "after" the negated section.
+            const closeParensBefore = nlBefore.split(')').length;
+            const openParensBefore = nlBefore.split('(').length - closeParensBefore;
+            let cleanAfter = nlAfter;
+            for (let i = 0; i < openParensBefore; i++) {
+                cleanAfter = cleanAfter.replace(/\)[+*?]?/, '');
+            }
+            nlAfter = cleanAfter;
+            const dollar = nlAfter === '' ? '(?:$|\\/)' : '';
+            re = nlBefore + nlFirst + nlAfter + dollar + nlLast;
+        }
+        // if the re is not "" at this point, then we need to make sure
+        // it doesn't match against an empty path part.
+        // Otherwise a/* will match a/, which it should not.
+        if (re !== '' && hasMagic) {
+            re = '(?=.)' + re;
+        }
+        if (addPatternStart) {
+            re = patternStart() + re;
+        }
+        // if it's nocase, and the lcase/uppercase don't match, it's magic
+        if (options.nocase && !hasMagic && !options.nocaseMagicOnly) {
+            hasMagic = pattern.toUpperCase() !== pattern.toLowerCase();
+        }
+        // skip the regexp for non-magical patterns
+        // unescape anything in it, though, so that it'll be
+        // an exact match against a file etc.
+        if (!hasMagic) {
+            return globUnescape(pattern);
+        }
+        const flags = (options.nocase ? 'i' : '') + (uflag ? 'u' : '');
+        try {
+            const ext = fastTest
+                ? {
+                    _glob: pattern,
+                    _src: re,
+                    test: fastTest,
+                }
+                : {
+                    _glob: pattern,
+                    _src: re,
+                };
+            return Object.assign(new RegExp('^' + re + '$', flags), ext);
+            /* c8 ignore start */
+        }
+        catch (er) {
+            // should be impossible
+            // If it was an invalid regular expression, then it can't match
+            // anything.  This trick looks for a character after the end of
+            // the string, which is of course impossible, except in multi-line
+            // mode, but it's not a /m regex.
+            this.debug('invalid regexp', er);
+            return new RegExp('$.');
+        }
+        /* c8 ignore stop */
+    }
+    makeRe() {
+        if (this.regexp || this.regexp === false)
+            return this.regexp;
+        // at this point, this.set is a 2d array of partial
+        // pattern strings, or "**".
+        //
+        // It's better to use .match().  This function shouldn't
+        // be used, really, but it's pretty convenient sometimes,
+        // when you just want to work with a regex.
+        const set = this.set;
+        if (!set.length) {
+            this.regexp = false;
+            return this.regexp;
+        }
+        const options = this.options;
+        const twoStar = options.noglobstar
+            ? star
+            : options.dot
+                ? twoStarDot
+                : twoStarNoDot;
+        const flags = options.nocase ? 'i' : '';
+        // regexpify non-globstar patterns
+        // if ** is only item, then we just do one twoStar
+        // if ** is first, and there are more, prepend (\/|twoStar\/)? to next
+        // if ** is last, append (\/twoStar|) to previous
+        // if ** is in the middle, append (\/|\/twoStar\/) to previous
+        // then filter out GLOBSTAR symbols
+        let re = set
+            .map(pattern => {
+            const pp = pattern.map(p => typeof p === 'string'
+                ? regExpEscape(p)
+                : p === exports.GLOBSTAR
+                    ? exports.GLOBSTAR
+                    : p._src);
+            pp.forEach((p, i) => {
+                const next = pp[i + 1];
+                const prev = pp[i - 1];
+                if (p !== exports.GLOBSTAR || prev === exports.GLOBSTAR) {
+                    return;
+                }
+                if (prev === undefined) {
+                    if (next !== undefined && next !== exports.GLOBSTAR) {
+                        pp[i + 1] = '(?:\\/|' + twoStar + '\\/)?' + next;
+                    }
+                    else {
+                        pp[i] = twoStar;
+                    }
+                }
+                else if (next === undefined) {
+                    pp[i - 1] = prev + '(?:\\/|' + twoStar + ')?';
+                }
+                else if (next !== exports.GLOBSTAR) {
+                    pp[i - 1] = prev + '(?:\\/|\\/' + twoStar + '\\/)' + next;
+                    pp[i + 1] = exports.GLOBSTAR;
+                }
+            });
+            return pp.filter(p => p !== exports.GLOBSTAR).join('/');
+        })
+            .join('|');
+        // must match entire pattern
+        // ending in a * or ** will make it less strict.
+        re = '^(?:' + re + ')$';
+        // can match anything, as long as it's not this.
+        if (this.negate)
+            re = '^(?!' + re + ').*$';
+        try {
+            this.regexp = new RegExp(re, flags);
+            /* c8 ignore start */
+        }
+        catch (ex) {
+            // should be impossible
+            this.regexp = false;
+        }
+        /* c8 ignore stop */
+        return this.regexp;
+    }
+    slashSplit(p) {
+        // if p starts with // on windows, we preserve that
+        // so that UNC paths aren't broken.  Otherwise, any number of
+        // / characters are coalesced into one, unless
+        // preserveMultipleSlashes is set to true.
+        if (this.preserveMultipleSlashes) {
+            return p.split('/');
+        }
+        else if (this.isWindows && /^\/\/[^\/]+/.test(p)) {
+            // add an extra '' for the one we lose
+            return ['', ...p.split(/\/+/)];
+        }
+        else {
+            return p.split(/\/+/);
+        }
+    }
+    match(f, partial = this.partial) {
+        this.debug('match', f, this.pattern);
+        // short-circuit in the case of busted things.
+        // comments, etc.
+        if (this.comment) {
+            return false;
+        }
+        if (this.empty) {
+            return f === '';
+        }
+        if (f === '/' && partial) {
+            return true;
+        }
+        const options = this.options;
+        // windows: need to use /, not \
+        if (this.isWindows) {
+            f = f.split('\\').join('/');
+        }
+        // treat the test path as a set of pathparts.
+        const ff = this.slashSplit(f);
+        this.debug(this.pattern, 'split', ff);
+        // just ONE of the pattern sets in this.set needs to match
+        // in order for it to be valid.  If negating, then just one
+        // match means that we have failed.
+        // Either way, return on the first hit.
+        const set = this.set;
+        this.debug(this.pattern, 'set', set);
+        // Find the basename of the path by looking for the last non-empty segment
+        let filename = ff[ff.length - 1];
+        if (!filename) {
+            for (let i = ff.length - 2; !filename && i >= 0; i--) {
+                filename = ff[i];
+            }
+        }
+        for (let i = 0; i < set.length; i++) {
+            const pattern = set[i];
+            let file = ff;
+            if (options.matchBase && pattern.length === 1) {
+                file = [filename];
+            }
+            const hit = this.matchOne(file, pattern, partial);
+            if (hit) {
+                if (options.flipNegate) {
+                    return true;
+                }
+                return !this.negate;
+            }
+        }
+        // didn't get any hits.  this is success if it's a negative
+        // pattern, failure otherwise.
+        if (options.flipNegate) {
+            return false;
+        }
+        return this.negate;
+    }
+    static defaults(def) {
+        return exports.minimatch.defaults(def).Minimatch;
+    }
+}
+exports.Minimatch = Minimatch;
+exports.minimatch.Minimatch = Minimatch;
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 9569:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PathScurry = exports.Path = exports.PathScurryDarwin = exports.PathScurryPosix = exports.PathScurryWin32 = exports.PathScurryBase = exports.PathPosix = exports.PathWin32 = exports.PathBase = exports.ChildrenCache = exports.ResolveCache = void 0;
+const lru_cache_1 = __importDefault(__nccwpck_require__(758));
+const path_1 = __nccwpck_require__(1017);
+const url_1 = __nccwpck_require__(7310);
+const fs_1 = __nccwpck_require__(7147);
+const realpathSync = fs_1.realpathSync.native;
+// TODO: test perf of fs/promises realpath vs realpathCB,
+// since the promises one uses realpath.native
+const promises_1 = __nccwpck_require__(3292);
+const minipass_1 = __importDefault(__nccwpck_require__(1077));
+// turn something like //?/c:/ into c:\
+const uncDriveRegexp = /^\\\\\?\\([a-z]:)\\?$/i;
+const uncToDrive = (rootPath) => rootPath.replace(/\//g, '\\').replace(uncDriveRegexp, '$1\\');
+// windows paths are separated by either / or \
+const eitherSep = /[\\\/]/;
+const UNKNOWN = 0; // may not even exist, for all we know
+const IFIFO = 0b0001;
+const IFCHR = 0b0010;
+const IFDIR = 0b0100;
+const IFBLK = 0b0110;
+const IFREG = 0b1000;
+const IFLNK = 0b1010;
+const IFSOCK = 0b1100;
+const IFMT = 0b1111;
+// mask to unset low 4 bits
+const IFMT_UNKNOWN = ~IFMT;
+// set after successfully calling readdir() and getting entries.
+const READDIR_CALLED = 16;
+// set after a successful lstat()
+const LSTAT_CALLED = 32;
+// set if an entry (or one of its parents) is definitely not a dir
+const ENOTDIR = 64;
+// set if an entry (or one of its parents) does not exist
+// (can also be set on lstat errors like EACCES or ENAMETOOLONG)
+const ENOENT = 128;
+// cannot have child entries -- also verify &IFMT is either IFDIR or IFLNK
+// set if we fail to readlink
+const ENOREADLINK = 256;
+// set if we know realpath() will fail
+const ENOREALPATH = 512;
+const ENOCHILD = ENOTDIR | ENOENT | ENOREALPATH;
+const TYPEMASK = 1023;
+const entToType = (s) => s.isFile()
+    ? IFREG
+    : s.isDirectory()
+        ? IFDIR
+        : s.isSymbolicLink()
+            ? IFLNK
+            : s.isCharacterDevice()
+                ? IFCHR
+                : s.isBlockDevice()
+                    ? IFBLK
+                    : s.isSocket()
+                        ? IFSOCK
+                        : s.isFIFO()
+                            ? IFIFO
+                            : UNKNOWN;
+// normalize unicode path names
+const normalizeCache = new Map();
+const normalize = (s) => {
+    const c = normalizeCache.get(s);
+    if (c)
+        return c;
+    const n = s.normalize('NFKD');
+    normalizeCache.set(s, n);
+    return n;
+};
+const normalizeNocaseCache = new Map();
+const normalizeNocase = (s) => {
+    const c = normalizeNocaseCache.get(s);
+    if (c)
+        return c;
+    const n = normalize(s.toLowerCase());
+    normalizeNocaseCache.set(s, n);
+    return n;
+};
+/**
+ * An LRUCache for storing resolved path strings or Path objects.
+ * @internal
+ */
+class ResolveCache extends lru_cache_1.default {
+    constructor() {
+        super({ max: 256 });
+    }
+}
+exports.ResolveCache = ResolveCache;
+// In order to prevent blowing out the js heap by allocating hundreds of
+// thousands of Path entries when walking extremely large trees, the "children"
+// in this tree are represented by storing an array of Path entries in an
+// LRUCache, indexed by the parent.  At any time, Path.children() may return an
+// empty array, indicating that it doesn't know about any of its children, and
+// thus has to rebuild that cache.  This is fine, it just means that we don't
+// benefit as much from having the cached entries, but huge directory walks
+// don't blow out the stack, and smaller ones are still as fast as possible.
+//
+//It does impose some complexity when building up the readdir data, because we
+//need to pass a reference to the children array that we started with.
+/**
+ * an LRUCache for storing child entries.
+ * @internal
+ */
+class ChildrenCache extends lru_cache_1.default {
+    constructor(maxSize = 16 * 1024) {
+        super({
+            maxSize,
+            // parent + children
+            sizeCalculation: a => a.length + 1,
+        });
+    }
+}
+exports.ChildrenCache = ChildrenCache;
+/**
+ * Path objects are sort of like a super-powered
+ * {@link https://nodejs.org/docs/latest/api/fs.html#class-fsdirent fs.Dirent}
+ *
+ * Each one represents a single filesystem entry on disk, which may or may not
+ * exist. It includes methods for reading various types of information via
+ * lstat, readlink, and readdir, and caches all information to the greatest
+ * degree possible.
+ *
+ * Note that fs operations that would normally throw will instead return an
+ * "empty" value. This is in order to prevent excessive overhead from error
+ * stack traces.
+ */
+class PathBase {
+    /**
+     * the basename of this path
+     *
+     * **Important**: *always* test the path name against any test string
+     * usingthe {@link isNamed} method, and not by directly comparing this
+     * string. Otherwise, unicode path strings that the system sees as identical
+     * will not be properly treated as the same path, leading to incorrect
+     * behavior and possible security issues.
+     */
+    name;
+    /**
+     * the Path entry corresponding to the path root.
+     *
+     * @internal
+     */
+    root;
+    /**
+     * All roots found within the current PathScurry family
+     *
+     * @internal
+     */
+    roots;
+    /**
+     * a reference to the parent path, or undefined in the case of root entries
+     *
+     * @internal
+     */
+    parent;
+    /**
+     * boolean indicating whether paths are compared case-insensitively
+     * @internal
+     */
+    nocase;
+    #matchName;
+    #fullpath;
+    #relative;
+    #type;
+    #children;
+    #linkTarget;
+    #realpath;
+    /**
+     * Do not create new Path objects directly.  They should always be accessed
+     * via the PathScurry class or other methods on the Path class.
+     *
+     * @internal
+     */
+    constructor(name, type = UNKNOWN, root, roots, nocase, children, opts) {
+        this.name = name;
+        this.#matchName = nocase ? normalizeNocase(name) : normalize(name);
+        this.#type = type & TYPEMASK;
+        this.nocase = nocase;
+        this.roots = roots;
+        this.root = root || this;
+        this.#children = children;
+        this.#fullpath = opts.fullpath;
+        this.#relative = opts.relative;
+        this.parent = opts.parent;
+    }
+    /**
+     * @internal
+     */
+    childrenCache() {
+        return this.#children;
+    }
+    /**
+     * Get the Path object referenced by the string path, resolved from this Path
+     */
+    resolve(path) {
+        if (!path) {
+            return this;
+        }
+        const rootPath = this.getRootString(path);
+        const dir = path.substring(rootPath.length);
+        const dirParts = dir.split(this.splitSep);
+        const result = rootPath
+            ? this.getRoot(rootPath).#resolveParts(dirParts)
+            : this.#resolveParts(dirParts);
+        return result;
+    }
+    #resolveParts(dirParts) {
+        let p = this;
+        for (const part of dirParts) {
+            p = p.child(part);
+        }
+        return p;
+    }
+    /**
+     * Returns the cached children Path objects, if still available.  If they
+     * have fallen out of the cache, then returns an empty array, and resets the
+     * READDIR_CALLED bit, so that future calls to readdir() will require an fs
+     * lookup.
+     *
+     * @internal
+     */
+    children() {
+        const cached = this.#children.get(this);
+        if (cached) {
+            return cached;
+        }
+        const children = Object.assign([], { provisional: 0 });
+        this.#children.set(this, children);
+        this.#type &= ~READDIR_CALLED;
+        return children;
+    }
+    /**
+     * Resolves a path portion and returns or creates the child Path.
+     *
+     * Returns `this` if pathPart is `''` or `'.'`, or `parent` if pathPart is
+     * `'..'`.
+     *
+     * This should not be called directly.  If `pathPart` contains any path
+     * separators, it will lead to unsafe undefined behavior.
+     *
+     * Use `Path.resolve()` instead.
+     *
+     * @internal
+     */
+    child(pathPart, opts) {
+        if (pathPart === '' || pathPart === '.') {
+            return this;
+        }
+        if (pathPart === '..') {
+            return this.parent || this;
+        }
+        // find the child
+        const children = this.children();
+        const name = this.nocase
+            ? normalizeNocase(pathPart)
+            : normalize(pathPart);
+        for (const p of children) {
+            if (p.#matchName === name) {
+                return p;
+            }
+        }
+        // didn't find it, create provisional child, since it might not
+        // actually exist.  If we know the parent isn't a dir, then
+        // in fact it CAN'T exist.
+        const s = this.parent ? this.sep : '';
+        const fullpath = this.#fullpath
+            ? this.#fullpath + s + pathPart
+            : undefined;
+        const pchild = this.newChild(pathPart, UNKNOWN, opts);
+        pchild.parent = this;
+        pchild.#fullpath = fullpath;
+        if (!this.canReaddir()) {
+            pchild.#type |= ENOENT;
+        }
+        // don't have to update provisional, because if we have real children,
+        // then provisional is set to children.length, otherwise a lower number
+        children.push(pchild);
+        return pchild;
+    }
+    /**
+     * The relative path from the cwd. If it does not share an ancestor with
+     * the cwd, then this ends up being equivalent to the fullpath()
+     */
+    // TODO: instead of taking a param here, set it to '' in the constructor
+    // for the CWD, and set it to this.name for any roots.
+    relative() {
+        if (this.#relative !== undefined) {
+            return this.#relative;
+        }
+        const name = this.name;
+        const p = this.parent;
+        if (!p) {
+            return (this.#relative = this.name);
+        }
+        const pv = p.relative();
+        const rp = pv + (!pv || !p.parent ? '' : this.sep) + name;
+        return (this.#relative = rp);
+    }
+    /**
+     * The fully resolved path string for this Path entry
+     */
+    fullpath() {
+        if (this.#fullpath !== undefined) {
+            return this.#fullpath;
+        }
+        const name = this.name;
+        const p = this.parent;
+        if (!p) {
+            return (this.#fullpath = this.name);
+        }
+        const pv = p.fullpath();
+        const fp = pv + (!p.parent ? '' : this.sep) + name;
+        return (this.#fullpath = fp);
+    }
+    /**
+     * Is the Path of an unknown type?
+     *
+     * Note that we might know *something* about it if there has been a previous
+     * filesystem operation, for example that it does not exist, or is not a
+     * link, or whether it has child entries.
+     */
+    isUnknown() {
+        return (this.#type & IFMT) === UNKNOWN;
+    }
+    /**
+     * Is the Path a regular file?
+     */
+    isFile() {
+        return (this.#type & IFMT) === IFREG;
+    }
+    /**
+     * Is the Path a directory?
+     */
+    isDirectory() {
+        return (this.#type & IFMT) === IFDIR;
+    }
+    /**
+     * Is the path a character device?
+     */
+    isCharacterDevice() {
+        return (this.#type & IFMT) === IFCHR;
+    }
+    /**
+     * Is the path a block device?
+     */
+    isBlockDevice() {
+        return (this.#type & IFMT) === IFBLK;
+    }
+    /**
+     * Is the path a FIFO pipe?
+     */
+    isFIFO() {
+        return (this.#type & IFMT) === IFIFO;
+    }
+    /**
+     * Is the path a socket?
+     */
+    isSocket() {
+        return (this.#type & IFMT) === IFSOCK;
+    }
+    /**
+     * Is the path a symbolic link?
+     */
+    isSymbolicLink() {
+        return (this.#type & IFLNK) === IFLNK;
+    }
+    /**
+     * Return the entry if it has been subject of a successful lstat, or
+     * undefined otherwise.
+     *
+     * Does not read the filesystem, so an undefined result *could* simply
+     * mean that we haven't called lstat on it.
+     */
+    lstatCached() {
+        return this.#type & LSTAT_CALLED ? this : undefined;
+    }
+    /**
+     * Return the cached link target if the entry has been the subject of a
+     * successful readlink, or undefined otherwise.
+     *
+     * Does not read the filesystem, so an undefined result *could* just mean we
+     * don't have any cached data. Only use it if you are very sure that a
+     * readlink() has been called at some point.
+     */
+    readlinkCached() {
+        return this.#linkTarget;
+    }
+    /**
+     * Returns the cached realpath target if the entry has been the subject
+     * of a successful realpath, or undefined otherwise.
+     *
+     * Does not read the filesystem, so an undefined result *could* just mean we
+     * don't have any cached data. Only use it if you are very sure that a
+     * realpath() has been called at some point.
+     */
+    realpathCached() {
+        return this.#realpath;
+    }
+    /**
+     * Returns the cached child Path entries array if the entry has been the
+     * subject of a successful readdir(), or [] otherwise.
+     *
+     * Does not read the filesystem, so an empty array *could* just mean we
+     * don't have any cached data. Only use it if you are very sure that a
+     * readdir() has been called recently enough to still be valid.
+     */
+    readdirCached() {
+        const children = this.children();
+        return children.slice(0, children.provisional);
+    }
+    /**
+     * Return true if it's worth trying to readlink.  Ie, we don't (yet) have
+     * any indication that readlink will definitely fail.
+     *
+     * Returns false if the path is known to not be a symlink, if a previous
+     * readlink failed, or if the entry does not exist.
+     */
+    canReadlink() {
+        if (this.#linkTarget)
+            return true;
+        if (!this.parent)
+            return false;
+        // cases where it cannot possibly succeed
+        const ifmt = this.#type & IFMT;
+        return !((ifmt !== UNKNOWN && ifmt !== IFLNK) ||
+            this.#type & ENOREADLINK ||
+            this.#type & ENOENT);
+    }
+    /**
+     * Return true if readdir has previously been successfully called on this
+     * path, indicating that cachedReaddir() is likely valid.
+     */
+    calledReaddir() {
+        return !!(this.#type & READDIR_CALLED);
+    }
+    /**
+     * Returns true if the path is known to not exist. That is, a previous lstat
+     * or readdir failed to verify its existence when that would have been
+     * expected, or a parent entry was marked either enoent or enotdir.
+     */
+    isENOENT() {
+        return !!(this.#type & ENOENT);
+    }
+    /**
+     * Return true if the path is a match for the given path name.  This handles
+     * case sensitivity and unicode normalization.
+     *
+     * Note: even on case-sensitive systems, it is **not** safe to test the
+     * equality of the `.name` property to determine whether a given pathname
+     * matches, due to unicode normalization mismatches.
+     *
+     * Always use this method instead of testing the `path.name` property
+     * directly.
+     */
+    isNamed(n) {
+        return !this.nocase
+            ? this.#matchName === normalize(n)
+            : this.#matchName === normalizeNocase(n);
+    }
+    /**
+     * Return the Path object corresponding to the target of a symbolic link.
+     *
+     * If the Path is not a symbolic link, or if the readlink call fails for any
+     * reason, `undefined` is returned.
+     *
+     * Result is cached, and thus may be outdated if the filesystem is mutated.
+     */
+    async readlink() {
+        const target = this.#linkTarget;
+        if (target) {
+            return target;
+        }
+        if (!this.canReadlink()) {
+            return undefined;
+        }
+        /* c8 ignore start */
+        // already covered by the canReadlink test, here for ts grumples
+        if (!this.parent) {
+            return undefined;
+        }
+        /* c8 ignore stop */
+        try {
+            const read = await (0, promises_1.readlink)(this.fullpath());
+            const linkTarget = this.parent.resolve(read);
+            if (linkTarget) {
+                return (this.#linkTarget = linkTarget);
+            }
+        }
+        catch (er) {
+            this.#readlinkFail(er.code);
+            return undefined;
+        }
+    }
+    /**
+     * Synchronous {@link PathBase.readlink}
+     */
+    readlinkSync() {
+        const target = this.#linkTarget;
+        if (target) {
+            return target;
+        }
+        if (!this.canReadlink()) {
+            return undefined;
+        }
+        /* c8 ignore start */
+        // already covered by the canReadlink test, here for ts grumples
+        if (!this.parent) {
+            return undefined;
+        }
+        /* c8 ignore stop */
+        try {
+            const read = (0, fs_1.readlinkSync)(this.fullpath());
+            const linkTarget = this.parent.resolve(read);
+            if (linkTarget) {
+                return (this.#linkTarget = linkTarget);
+            }
+        }
+        catch (er) {
+            this.#readlinkFail(er.code);
+            return undefined;
+        }
+    }
+    #readdirSuccess(children) {
+        // succeeded, mark readdir called bit
+        this.#type |= READDIR_CALLED;
+        // mark all remaining provisional children as ENOENT
+        for (let p = children.provisional; p < children.length; p++) {
+            children[p].#markENOENT();
+        }
+    }
+    #markENOENT() {
+        // mark as UNKNOWN and ENOENT
+        if (this.#type & ENOENT)
+            return;
+        this.#type = (this.#type | ENOENT) & IFMT_UNKNOWN;
+        this.#markChildrenENOENT();
+    }
+    #markChildrenENOENT() {
+        // all children are provisional and do not exist
+        const children = this.children();
+        children.provisional = 0;
+        for (const p of children) {
+            p.#markENOENT();
+        }
+    }
+    #markENOREALPATH() {
+        this.#type |= ENOREALPATH;
+        this.#markENOTDIR();
+    }
+    // save the information when we know the entry is not a dir
+    #markENOTDIR() {
+        // entry is not a directory, so any children can't exist.
+        // this *should* be impossible, since any children created
+        // after it's been marked ENOTDIR should be marked ENOENT,
+        // so it won't even get to this point.
+        /* c8 ignore start */
+        if (this.#type & ENOTDIR)
+            return;
+        /* c8 ignore stop */
+        let t = this.#type;
+        // this could happen if we stat a dir, then delete it,
+        // then try to read it or one of its children.
+        if ((t & IFMT) === IFDIR)
+            t &= IFMT_UNKNOWN;
+        this.#type = t | ENOTDIR;
+        this.#markChildrenENOENT();
+    }
+    #readdirFail(code = '') {
+        // markENOTDIR and markENOENT also set provisional=0
+        if (code === 'ENOTDIR' || code === 'EPERM') {
+            this.#markENOTDIR();
+        }
+        else if (code === 'ENOENT') {
+            this.#markENOENT();
+        }
+        else {
+            this.children().provisional = 0;
+        }
+    }
+    #lstatFail(code = '') {
+        // Windows just raises ENOENT in this case, disable for win CI
+        /* c8 ignore start */
+        if (code === 'ENOTDIR') {
+            // already know it has a parent by this point
+            const p = this.parent;
+            p.#markENOTDIR();
+        }
+        else if (code === 'ENOENT') {
+            /* c8 ignore stop */
+            this.#markENOENT();
+        }
+    }
+    #readlinkFail(code = '') {
+        let ter = this.#type;
+        ter |= ENOREADLINK;
+        if (code === 'ENOENT')
+            ter |= ENOENT;
+        // windows gets a weird error when you try to readlink a file
+        if (code === 'EINVAL' || code === 'UNKNOWN') {
+            // exists, but not a symlink, we don't know WHAT it is, so remove
+            // all IFMT bits.
+            ter &= IFMT_UNKNOWN;
+        }
+        this.#type = ter;
+        // windows just gets ENOENT in this case.  We do cover the case,
+        // just disabled because it's impossible on Windows CI
+        /* c8 ignore start */
+        if (code === 'ENOTDIR' && this.parent) {
+            this.parent.#markENOTDIR();
+        }
+        /* c8 ignore stop */
+    }
+    #readdirAddChild(e, c) {
+        return (this.#readdirMaybePromoteChild(e, c) ||
+            this.#readdirAddNewChild(e, c));
+    }
+    #readdirAddNewChild(e, c) {
+        // alloc new entry at head, so it's never provisional
+        const type = entToType(e);
+        const child = this.newChild(e.name, type, { parent: this });
+        const ifmt = child.#type & IFMT;
+        if (ifmt !== IFDIR && ifmt !== IFLNK && ifmt !== UNKNOWN) {
+            child.#type |= ENOTDIR;
+        }
+        c.unshift(child);
+        c.provisional++;
+        return child;
+    }
+    #readdirMaybePromoteChild(e, c) {
+        for (let p = c.provisional; p < c.length; p++) {
+            const pchild = c[p];
+            const name = this.nocase
+                ? normalizeNocase(e.name)
+                : normalize(e.name);
+            if (name !== pchild.#matchName) {
+                continue;
+            }
+            return this.#readdirPromoteChild(e, pchild, p, c);
+        }
+    }
+    #readdirPromoteChild(e, p, index, c) {
+        const v = p.name;
+        // retain any other flags, but set ifmt from dirent
+        p.#type = (p.#type & IFMT_UNKNOWN) | entToType(e);
+        // case sensitivity fixing when we learn the true name.
+        if (v !== e.name)
+            p.name = e.name;
+        // just advance provisional index (potentially off the list),
+        // otherwise we have to splice/pop it out and re-insert at head
+        if (index !== c.provisional) {
+            if (index === c.length - 1)
+                c.pop();
+            else
+                c.splice(index, 1);
+            c.unshift(p);
+        }
+        c.provisional++;
+        return p;
+    }
+    /**
+     * Call lstat() on this Path, and update all known information that can be
+     * determined.
+     *
+     * Note that unlike `fs.lstat()`, the returned value does not contain some
+     * information, such as `mode`, `dev`, `nlink`, and `ino`.  If that
+     * information is required, you will need to call `fs.lstat` yourself.
+     *
+     * If the Path refers to a nonexistent file, or if the lstat call fails for
+     * any reason, `undefined` is returned.  Otherwise the updated Path object is
+     * returned.
+     *
+     * Results are cached, and thus may be out of date if the filesystem is
+     * mutated.
+     */
+    async lstat() {
+        if ((this.#type & ENOENT) === 0) {
+            try {
+                // retain any other flags, but set the ifmt
+                const ifmt = entToType(await (0, promises_1.lstat)(this.fullpath()));
+                this.#type = (this.#type & IFMT_UNKNOWN) | ifmt | LSTAT_CALLED;
+                if (ifmt !== UNKNOWN && ifmt !== IFDIR && ifmt !== IFLNK) {
+                    this.#type |= ENOTDIR;
+                }
+                return this;
+            }
+            catch (er) {
+                this.#lstatFail(er.code);
+            }
+        }
+    }
+    /**
+     * synchronous {@link PathBase.lstat}
+     */
+    lstatSync() {
+        if ((this.#type & ENOENT) === 0) {
+            try {
+                // retain any other flags, but set the ifmt
+                const ifmt = entToType((0, fs_1.lstatSync)(this.fullpath()));
+                this.#type = (this.#type & IFMT_UNKNOWN) | ifmt | LSTAT_CALLED;
+                if (ifmt !== UNKNOWN && ifmt !== IFDIR && ifmt !== IFLNK) {
+                    this.#type |= ENOTDIR;
+                }
+                return this;
+            }
+            catch (er) {
+                this.#lstatFail(er.code);
+            }
+        }
+    }
+    #onReaddirCB = [];
+    #readdirCBInFlight = false;
+    #callOnReaddirCB(children) {
+        this.#readdirCBInFlight = false;
+        const cbs = this.#onReaddirCB.slice();
+        this.#onReaddirCB.length = 0;
+        cbs.forEach(cb => cb(null, children));
+    }
+    /**
+     * Standard node-style callback interface to get list of directory entries.
+     *
+     * If the Path cannot or does not contain any children, then an empty array
+     * is returned.
+     *
+     * Results are cached, and thus may be out of date if the filesystem is
+     * mutated.
+     *
+     * @param cb The callback called with (er, entries).  Note that the `er`
+     * param is somewhat extraneous, as all readdir() errors are handled and
+     * simply result in an empty set of entries being returned.
+     * @param allowZalgo Boolean indicating that immediately known results should
+     * *not* be deferred with `queueMicrotask`. Defaults to `false`. Release
+     * zalgo at your peril, the dark pony lord is devious and unforgiving.
+     */
+    readdirCB(cb, allowZalgo = false) {
+        if (!this.canReaddir()) {
+            if (allowZalgo)
+                cb(null, []);
+            else
+                queueMicrotask(() => cb(null, []));
+            return;
+        }
+        const children = this.children();
+        if (this.calledReaddir()) {
+            const c = children.slice(0, children.provisional);
+            if (allowZalgo)
+                cb(null, c);
+            else
+                queueMicrotask(() => cb(null, c));
+            return;
+        }
+        // don't have to worry about zalgo at this point.
+        this.#onReaddirCB.push(cb);
+        if (this.#readdirCBInFlight) {
+            return;
+        }
+        this.#readdirCBInFlight = true;
+        // else read the directory, fill up children
+        // de-provisionalize any provisional children.
+        const fullpath = this.fullpath();
+        (0, fs_1.readdir)(fullpath, { withFileTypes: true }, (er, entries) => {
+            if (er) {
+                this.#readdirFail(er.code);
+                children.provisional = 0;
+            }
+            else {
+                for (const e of entries) {
+                    this.#readdirAddChild(e, children);
+                }
+                this.#readdirSuccess(children);
+            }
+            this.#callOnReaddirCB(children.slice(0, children.provisional));
+            return;
+        });
+    }
+    #asyncReaddirInFlight;
+    /**
+     * Return an array of known child entries.
+     *
+     * If the Path cannot or does not contain any children, then an empty array
+     * is returned.
+     *
+     * Results are cached, and thus may be out of date if the filesystem is
+     * mutated.
+     */
+    async readdir() {
+        if (!this.canReaddir()) {
+            return [];
+        }
+        const children = this.children();
+        if (this.calledReaddir()) {
+            return children.slice(0, children.provisional);
+        }
+        // else read the directory, fill up children
+        // de-provisionalize any provisional children.
+        const fullpath = this.fullpath();
+        if (this.#asyncReaddirInFlight) {
+            await this.#asyncReaddirInFlight;
+        }
+        else {
+            /* c8 ignore start */
+            let resolve = () => { };
+            /* c8 ignore stop */
+            this.#asyncReaddirInFlight = new Promise(res => (resolve = res));
+            try {
+                for (const e of await (0, promises_1.readdir)(fullpath, { withFileTypes: true })) {
+                    this.#readdirAddChild(e, children);
+                }
+                this.#readdirSuccess(children);
+            }
+            catch (er) {
+                this.#readdirFail(er.code);
+                children.provisional = 0;
+            }
+            this.#asyncReaddirInFlight = undefined;
+            resolve();
+        }
+        return children.slice(0, children.provisional);
+    }
+    /**
+     * synchronous {@link PathBase.readdir}
+     */
+    readdirSync() {
+        if (!this.canReaddir()) {
+            return [];
+        }
+        const children = this.children();
+        if (this.calledReaddir()) {
+            return children.slice(0, children.provisional);
+        }
+        // else read the directory, fill up children
+        // de-provisionalize any provisional children.
+        const fullpath = this.fullpath();
+        try {
+            for (const e of (0, fs_1.readdirSync)(fullpath, { withFileTypes: true })) {
+                this.#readdirAddChild(e, children);
+            }
+            this.#readdirSuccess(children);
+        }
+        catch (er) {
+            this.#readdirFail(er.code);
+            children.provisional = 0;
+        }
+        return children.slice(0, children.provisional);
+    }
+    canReaddir() {
+        if (this.#type & ENOCHILD)
+            return false;
+        const ifmt = IFMT & this.#type;
+        // we always set ENOTDIR when setting IFMT, so should be impossible
+        /* c8 ignore start */
+        if (!(ifmt === UNKNOWN || ifmt === IFDIR || ifmt === IFLNK)) {
+            return false;
+        }
+        /* c8 ignore stop */
+        return true;
+    }
+    shouldWalk(dirs, walkFilter) {
+        return ((this.#type & IFDIR) === IFDIR &&
+            !(this.#type & ENOCHILD) &&
+            !dirs.has(this) &&
+            (!walkFilter || walkFilter(this)));
+    }
+    /**
+     * Return the Path object corresponding to path as resolved
+     * by realpath(3).
+     *
+     * If the realpath call fails for any reason, `undefined` is returned.
+     *
+     * Result is cached, and thus may be outdated if the filesystem is mutated.
+     * On success, returns a Path object.
+     */
+    async realpath() {
+        if (this.#realpath)
+            return this.#realpath;
+        if ((ENOREALPATH | ENOREADLINK | ENOENT) & this.#type)
+            return undefined;
+        try {
+            const rp = await (0, promises_1.realpath)(this.fullpath());
+            return (this.#realpath = this.resolve(rp));
+        }
+        catch (_) {
+            this.#markENOREALPATH();
+        }
+    }
+    /**
+     * Synchronous {@link realpath}
+     */
+    realpathSync() {
+        if (this.#realpath)
+            return this.#realpath;
+        if ((ENOREALPATH | ENOREADLINK | ENOENT) & this.#type)
+            return undefined;
+        try {
+            const rp = realpathSync(this.fullpath());
+            return (this.#realpath = this.resolve(rp));
+        }
+        catch (_) {
+            this.#markENOREALPATH();
+        }
+    }
+}
+exports.PathBase = PathBase;
+/**
+ * Path class used on win32 systems
+ *
+ * Uses `'\\'` as the path separator for returned paths, either `'\\'` or `'/'`
+ * as the path separator for parsing paths.
+ */
+class PathWin32 extends PathBase {
+    /**
+     * Separator for generating path strings.
+     */
+    sep = '\\';
+    /**
+     * Separator for parsing path strings.
+     */
+    splitSep = eitherSep;
+    /**
+     * Do not create new Path objects directly.  They should always be accessed
+     * via the PathScurry class or other methods on the Path class.
+     *
+     * @internal
+     */
+    constructor(name, type = UNKNOWN, root, roots, nocase, children, opts) {
+        super(name, type, root, roots, nocase, children, opts);
+    }
+    /**
+     * @internal
+     */
+    newChild(name, type = UNKNOWN, opts = {}) {
+        return new PathWin32(name, type, this.root, this.roots, this.nocase, this.childrenCache(), opts);
+    }
+    /**
+     * @internal
+     */
+    getRootString(path) {
+        return path_1.win32.parse(path).root;
+    }
+    /**
+     * @internal
+     */
+    getRoot(rootPath) {
+        rootPath = uncToDrive(rootPath.toUpperCase());
+        if (rootPath === this.root.name) {
+            return this.root;
+        }
+        // ok, not that one, check if it matches another we know about
+        for (const [compare, root] of Object.entries(this.roots)) {
+            if (this.sameRoot(rootPath, compare)) {
+                return (this.roots[rootPath] = root);
+            }
+        }
+        // otherwise, have to create a new one.
+        return (this.roots[rootPath] = new PathScurryWin32(rootPath, this).root);
+    }
+    /**
+     * @internal
+     */
+    sameRoot(rootPath, compare = this.root.name) {
+        // windows can (rarely) have case-sensitive filesystem, but
+        // UNC and drive letters are always case-insensitive, and canonically
+        // represented uppercase.
+        rootPath = rootPath
+            .toUpperCase()
+            .replace(/\//g, '\\')
+            .replace(uncDriveRegexp, '$1\\');
+        return rootPath === compare;
+    }
+}
+exports.PathWin32 = PathWin32;
+/**
+ * Path class used on all posix systems.
+ *
+ * Uses `'/'` as the path separator.
+ */
+class PathPosix extends PathBase {
+    /**
+     * separator for parsing path strings
+     */
+    splitSep = '/';
+    /**
+     * separator for generating path strings
+     */
+    sep = '/';
+    /**
+     * Do not create new Path objects directly.  They should always be accessed
+     * via the PathScurry class or other methods on the Path class.
+     *
+     * @internal
+     */
+    constructor(name, type = UNKNOWN, root, roots, nocase, children, opts) {
+        super(name, type, root, roots, nocase, children, opts);
+    }
+    /**
+     * @internal
+     */
+    getRootString(path) {
+        return path.startsWith('/') ? '/' : '';
+    }
+    /**
+     * @internal
+     */
+    getRoot(_rootPath) {
+        return this.root;
+    }
+    /**
+     * @internal
+     */
+    newChild(name, type = UNKNOWN, opts = {}) {
+        return new PathPosix(name, type, this.root, this.roots, this.nocase, this.childrenCache(), opts);
+    }
+}
+exports.PathPosix = PathPosix;
+/**
+ * The base class for all PathScurry classes, providing the interface for path
+ * resolution and filesystem operations.
+ *
+ * Typically, you should *not* instantiate this class directly, but rather one
+ * of the platform-specific classes, or the exported {@link PathScurry} which
+ * defaults to the current platform.
+ */
+class PathScurryBase {
+    /**
+     * The root Path entry for the current working directory of this Scurry
+     */
+    root;
+    /**
+     * The string path for the root of this Scurry's current working directory
+     */
+    rootPath;
+    /**
+     * A collection of all roots encountered, referenced by rootPath
+     */
+    roots;
+    /**
+     * The Path entry corresponding to this PathScurry's current working directory.
+     */
+    cwd;
+    #resolveCache;
+    #children;
+    /**
+     * Perform path comparisons case-insensitively.
+     *
+     * Defaults true on Darwin and Windows systems, false elsewhere.
+     */
+    nocase;
+    /**
+     * This class should not be instantiated directly.
+     *
+     * Use PathScurryWin32, PathScurryDarwin, PathScurryPosix, or PathScurry
+     *
+     * @internal
+     */
+    constructor(cwd = process.cwd(), pathImpl, sep, { nocase, childrenCacheSize = 16 * 1024 } = {}) {
+        if (cwd instanceof URL || cwd.startsWith('file://')) {
+            cwd = (0, url_1.fileURLToPath)(cwd);
+        }
+        // resolve and split root, and then add to the store.
+        // this is the only time we call path.resolve()
+        const cwdPath = pathImpl.resolve(cwd);
+        this.roots = Object.create(null);
+        this.rootPath = this.parseRootPath(cwdPath);
+        this.#resolveCache = new ResolveCache();
+        this.#children = new ChildrenCache(childrenCacheSize);
+        const split = cwdPath.substring(this.rootPath.length).split(sep);
+        // resolve('/') leaves '', splits to [''], we don't want that.
+        if (split.length === 1 && !split[0]) {
+            split.pop();
+        }
+        /* c8 ignore start */
+        if (nocase === undefined) {
+            throw new TypeError('must provide nocase setting to PathScurryBase ctor');
+        }
+        /* c8 ignore stop */
+        this.nocase = nocase;
+        this.root = this.newRoot();
+        this.roots[this.rootPath] = this.root;
+        let prev = this.root;
+        let len = split.length - 1;
+        const joinSep = pathImpl.sep;
+        let abs = this.rootPath;
+        let sawFirst = false;
+        for (const part of split) {
+            prev = prev.child(part, {
+                relative: new Array(len--).fill('..').join(joinSep),
+                fullpath: (abs += (sawFirst ? '' : joinSep) + part),
+            });
+            sawFirst = true;
+        }
+        this.cwd = prev;
+    }
+    /**
+     * Return the cache of child entries.  Exposed so subclasses can create
+     * child Path objects in a platform-specific way.
+     *
+     * @internal
+     */
+    childrenCache() {
+        return this.#children;
+    }
+    /**
+     * Resolve one or more path strings to a resolved string
+     *
+     * Same interface as require('path').resolve.
+     *
+     * Much faster than path.resolve() when called multiple times for the same
+     * path, because the resolved Path objects are cached.  Much slower
+     * otherwise.
+     */
+    resolve(...paths) {
+        // first figure out the minimum number of paths we have to test
+        // we always start at cwd, but any absolutes will bump the start
+        let r = '';
+        for (let i = paths.length - 1; i >= 0; i--) {
+            const p = paths[i];
+            if (!p || p === '.')
+                continue;
+            r = r ? `${p}/${r}` : p;
+            if (this.isAbsolute(p)) {
+                break;
+            }
+        }
+        const cached = this.#resolveCache.get(r);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const result = this.cwd.resolve(r).fullpath();
+        this.#resolveCache.set(r, result);
+        return result;
+    }
+    /**
+     * find the relative path from the cwd to the supplied path string or entry
+     */
+    relative(entry = this.cwd) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        return entry.relative();
+    }
+    /**
+     * Return the basename for the provided string or Path object
+     */
+    basename(entry = this.cwd) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        return entry.name;
+    }
+    /**
+     * Return the dirname for the provided string or Path object
+     */
+    dirname(entry = this.cwd) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        return (entry.parent || entry).fullpath();
+    }
+    async readdir(entry = this.cwd, opts = {
+        withFileTypes: true,
+    }) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            opts = entry;
+            entry = this.cwd;
+        }
+        const { withFileTypes } = opts;
+        if (!entry.canReaddir()) {
+            return [];
+        }
+        else {
+            const p = await entry.readdir();
+            return withFileTypes ? p : p.map(e => e.name);
+        }
+    }
+    readdirSync(entry = this.cwd, opts = {
+        withFileTypes: true,
+    }) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            opts = entry;
+            entry = this.cwd;
+        }
+        const { withFileTypes = true } = opts;
+        if (!entry.canReaddir()) {
+            return [];
+        }
+        else if (withFileTypes) {
+            return entry.readdirSync();
+        }
+        else {
+            return entry.readdirSync().map(e => e.name);
+        }
+    }
+    /**
+     * Call lstat() on the string or Path object, and update all known
+     * information that can be determined.
+     *
+     * Note that unlike `fs.lstat()`, the returned value does not contain some
+     * information, such as `mode`, `dev`, `nlink`, and `ino`.  If that
+     * information is required, you will need to call `fs.lstat` yourself.
+     *
+     * If the Path refers to a nonexistent file, or if the lstat call fails for
+     * any reason, `undefined` is returned.  Otherwise the updated Path object is
+     * returned.
+     *
+     * Results are cached, and thus may be out of date if the filesystem is
+     * mutated.
+     */
+    async lstat(entry = this.cwd) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        return entry.lstat();
+    }
+    /**
+     * synchronous {@link PathScurryBase.lstat}
+     */
+    lstatSync(entry = this.cwd) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        return entry.lstatSync();
+    }
+    async readlink(entry = this.cwd, { withFileTypes } = {
+        withFileTypes: false,
+    }) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            withFileTypes = entry.withFileTypes;
+            entry = this.cwd;
+        }
+        const e = await entry.readlink();
+        return withFileTypes ? e : e?.fullpath();
+    }
+    readlinkSync(entry = this.cwd, { withFileTypes } = {
+        withFileTypes: false,
+    }) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            withFileTypes = entry.withFileTypes;
+            entry = this.cwd;
+        }
+        const e = entry.readlinkSync();
+        return withFileTypes ? e : e?.fullpath();
+    }
+    async realpath(entry = this.cwd, { withFileTypes } = {
+        withFileTypes: false,
+    }) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            withFileTypes = entry.withFileTypes;
+            entry = this.cwd;
+        }
+        const e = await entry.realpath();
+        return withFileTypes ? e : e?.fullpath();
+    }
+    realpathSync(entry = this.cwd, { withFileTypes } = {
+        withFileTypes: false,
+    }) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            withFileTypes = entry.withFileTypes;
+            entry = this.cwd;
+        }
+        const e = entry.realpathSync();
+        return withFileTypes ? e : e?.fullpath();
+    }
+    async walk(entry = this.cwd, opts = {}) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            opts = entry;
+            entry = this.cwd;
+        }
+        const { withFileTypes = true, follow = false, filter, walkFilter, } = opts;
+        const results = [];
+        if (!filter || filter(entry)) {
+            results.push(withFileTypes ? entry : entry.fullpath());
+        }
+        const dirs = new Set();
+        const walk = (dir, cb) => {
+            dirs.add(dir);
+            dir.readdirCB((er, entries) => {
+                /* c8 ignore start */
+                if (er) {
+                    return cb(er);
+                }
+                /* c8 ignore stop */
+                let len = entries.length;
+                if (!len)
+                    return cb();
+                const next = () => {
+                    if (--len === 0) {
+                        cb();
+                    }
+                };
+                for (const e of entries) {
+                    if (!filter || filter(e)) {
+                        results.push(withFileTypes ? e : e.fullpath());
+                    }
+                    if (follow && e.isSymbolicLink()) {
+                        e.realpath()
+                            .then(r => (r?.isUnknown() ? r.lstat() : r))
+                            .then(r => r?.shouldWalk(dirs, walkFilter) ? walk(r, next) : next());
+                    }
+                    else {
+                        if (e.shouldWalk(dirs, walkFilter)) {
+                            walk(e, next);
+                        }
+                        else {
+                            next();
+                        }
+                    }
+                }
+            }, true); // zalgooooooo
+        };
+        const start = entry;
+        return new Promise((res, rej) => {
+            walk(start, er => {
+                /* c8 ignore start */
+                if (er)
+                    return rej(er);
+                /* c8 ignore stop */
+                res(results);
+            });
+        });
+    }
+    walkSync(entry = this.cwd, opts = {}) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            opts = entry;
+            entry = this.cwd;
+        }
+        const { withFileTypes = true, follow = false, filter, walkFilter, } = opts;
+        const results = [];
+        if (!filter || filter(entry)) {
+            results.push(withFileTypes ? entry : entry.fullpath());
+        }
+        const dirs = new Set([entry]);
+        for (const dir of dirs) {
+            const entries = dir.readdirSync();
+            for (const e of entries) {
+                if (!filter || filter(e)) {
+                    results.push(withFileTypes ? e : e.fullpath());
+                }
+                let r = e;
+                if (e.isSymbolicLink()) {
+                    if (!(follow && (r = e.realpathSync())))
+                        continue;
+                    if (r.isUnknown())
+                        r.lstatSync();
+                }
+                if (r.shouldWalk(dirs, walkFilter)) {
+                    dirs.add(r);
+                }
+            }
+        }
+        return results;
+    }
+    /**
+     * Support for `for await`
+     *
+     * Alias for {@link PathScurryBase.iterate}
+     *
+     * Note: As of Node 19, this is very slow, compared to other methods of
+     * walking.  Consider using {@link PathScurryBase.stream} if memory overhead
+     * and backpressure are concerns, or {@link PathScurryBase.walk} if not.
+     */
+    [Symbol.asyncIterator]() {
+        return this.iterate();
+    }
+    iterate(entry = this.cwd, options = {}) {
+        // iterating async over the stream is significantly more performant,
+        // especially in the warm-cache scenario, because it buffers up directory
+        // entries in the background instead of waiting for a yield for each one.
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            options = entry;
+            entry = this.cwd;
+        }
+        return this.stream(entry, options)[Symbol.asyncIterator]();
+    }
+    /**
+     * Iterating over a PathScurry performs a synchronous walk.
+     *
+     * Alias for {@link PathScurryBase.iterateSync}
+     */
+    [Symbol.iterator]() {
+        return this.iterateSync();
+    }
+    *iterateSync(entry = this.cwd, opts = {}) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            opts = entry;
+            entry = this.cwd;
+        }
+        const { withFileTypes = true, follow = false, filter, walkFilter, } = opts;
+        if (!filter || filter(entry)) {
+            yield withFileTypes ? entry : entry.fullpath();
+        }
+        const dirs = new Set([entry]);
+        for (const dir of dirs) {
+            const entries = dir.readdirSync();
+            for (const e of entries) {
+                if (!filter || filter(e)) {
+                    yield withFileTypes ? e : e.fullpath();
+                }
+                let r = e;
+                if (e.isSymbolicLink()) {
+                    if (!(follow && (r = e.realpathSync())))
+                        continue;
+                    if (r.isUnknown())
+                        r.lstatSync();
+                }
+                if (r.shouldWalk(dirs, walkFilter)) {
+                    dirs.add(r);
+                }
+            }
+        }
+    }
+    stream(entry = this.cwd, opts = {}) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            opts = entry;
+            entry = this.cwd;
+        }
+        const { withFileTypes = true, follow = false, filter, walkFilter, } = opts;
+        const results = new minipass_1.default({ objectMode: true });
+        if (!filter || filter(entry)) {
+            results.write(withFileTypes ? entry : entry.fullpath());
+        }
+        const dirs = new Set();
+        const queue = [entry];
+        let processing = 0;
+        const process = () => {
+            let paused = false;
+            while (!paused) {
+                const dir = queue.shift();
+                if (!dir) {
+                    if (processing === 0)
+                        results.end();
+                    return;
+                }
+                processing++;
+                dirs.add(dir);
+                const onReaddir = (er, entries, didRealpaths = false) => {
+                    /* c8 ignore start */
+                    if (er)
+                        return results.emit('error', er);
+                    /* c8 ignore stop */
+                    if (follow && !didRealpaths) {
+                        const promises = [];
+                        for (const e of entries) {
+                            if (e.isSymbolicLink()) {
+                                promises.push(e
+                                    .realpath()
+                                    .then((r) => r?.isUnknown() ? r.lstat() : r));
+                            }
+                        }
+                        if (promises.length) {
+                            Promise.all(promises).then(() => onReaddir(null, entries, true));
+                            return;
+                        }
+                    }
+                    for (const e of entries) {
+                        if (e && (!filter || filter(e))) {
+                            if (!results.write(withFileTypes ? e : e.fullpath())) {
+                                paused = true;
+                            }
+                        }
+                    }
+                    processing--;
+                    for (const e of entries) {
+                        const r = e.realpathCached() || e;
+                        if (r.shouldWalk(dirs, walkFilter)) {
+                            queue.push(r);
+                        }
+                    }
+                    if (paused && !results.flowing) {
+                        results.once('drain', process);
+                    }
+                    else if (!sync) {
+                        process();
+                    }
+                };
+                // zalgo containment
+                let sync = true;
+                dir.readdirCB(onReaddir, true);
+                sync = false;
+            }
+        };
+        process();
+        return results;
+    }
+    streamSync(entry = this.cwd, opts = {}) {
+        if (typeof entry === 'string') {
+            entry = this.cwd.resolve(entry);
+        }
+        else if (!(entry instanceof PathBase)) {
+            opts = entry;
+            entry = this.cwd;
+        }
+        const { withFileTypes = true, follow = false, filter, walkFilter, } = opts;
+        const results = new minipass_1.default({ objectMode: true });
+        const dirs = new Set();
+        if (!filter || filter(entry)) {
+            results.write(withFileTypes ? entry : entry.fullpath());
+        }
+        const queue = [entry];
+        let processing = 0;
+        const process = () => {
+            let paused = false;
+            while (!paused) {
+                const dir = queue.shift();
+                if (!dir) {
+                    if (processing === 0)
+                        results.end();
+                    return;
+                }
+                processing++;
+                dirs.add(dir);
+                const entries = dir.readdirSync();
+                for (const e of entries) {
+                    if (!filter || filter(e)) {
+                        if (!results.write(withFileTypes ? e : e.fullpath())) {
+                            paused = true;
+                        }
+                    }
+                }
+                processing--;
+                for (const e of entries) {
+                    let r = e;
+                    if (e.isSymbolicLink()) {
+                        if (!(follow && (r = e.realpathSync())))
+                            continue;
+                        if (r.isUnknown())
+                            r.lstatSync();
+                    }
+                    if (r.shouldWalk(dirs, walkFilter)) {
+                        queue.push(r);
+                    }
+                }
+            }
+            if (paused && !results.flowing)
+                results.once('drain', process);
+        };
+        process();
+        return results;
+    }
+}
+exports.PathScurryBase = PathScurryBase;
+/**
+ * Windows implementation of {@link PathScurryBase}
+ *
+ * Defaults to case insensitve, uses `'\\'` to generate path strings.  Uses
+ * {@link PathWin32} for Path objects.
+ */
+class PathScurryWin32 extends PathScurryBase {
+    /**
+     * separator for generating path strings
+     */
+    sep = '\\';
+    constructor(cwd = process.cwd(), opts = {}) {
+        const { nocase = true } = opts;
+        super(cwd, path_1.win32, '\\', { ...opts, nocase });
+        this.nocase = nocase;
+        for (let p = this.cwd; p; p = p.parent) {
+            p.nocase = this.nocase;
+        }
+    }
+    /**
+     * @internal
+     */
+    parseRootPath(dir) {
+        // if the path starts with a single separator, it's not a UNC, and we'll
+        // just get separator as the root, and driveFromUNC will return \
+        // In that case, mount \ on the root from the cwd.
+        return path_1.win32.parse(dir).root.toUpperCase();
+    }
+    /**
+     * @internal
+     */
+    newRoot() {
+        return new PathWin32(this.rootPath, IFDIR, undefined, this.roots, this.nocase, this.childrenCache(), {});
+    }
+    /**
+     * Return true if the provided path string is an absolute path
+     */
+    isAbsolute(p) {
+        return (p.startsWith('/') || p.startsWith('\\') || /^[a-z]:(\/|\\)/i.test(p));
+    }
+}
+exports.PathScurryWin32 = PathScurryWin32;
+/**
+ * {@link PathScurryBase} implementation for all posix systems other than Darwin.
+ *
+ * Defaults to case-sensitive matching, uses `'/'` to generate path strings.
+ *
+ * Uses {@link PathPosix} for Path objects.
+ */
+class PathScurryPosix extends PathScurryBase {
+    /**
+     * separator for generating path strings
+     */
+    sep = '/';
+    constructor(cwd = process.cwd(), opts = {}) {
+        const { nocase = false } = opts;
+        super(cwd, path_1.posix, '/', { ...opts, nocase });
+        this.nocase = nocase;
+    }
+    /**
+     * @internal
+     */
+    parseRootPath(_dir) {
+        return '/';
+    }
+    /**
+     * @internal
+     */
+    newRoot() {
+        return new PathPosix(this.rootPath, IFDIR, undefined, this.roots, this.nocase, this.childrenCache(), {});
+    }
+    /**
+     * Return true if the provided path string is an absolute path
+     */
+    isAbsolute(p) {
+        return p.startsWith('/');
+    }
+}
+exports.PathScurryPosix = PathScurryPosix;
+/**
+ * {@link PathScurryBase} implementation for Darwin (macOS) systems.
+ *
+ * Defaults to case-insensitive matching, uses `'/'` for generating path
+ * strings.
+ *
+ * Uses {@link PathPosix} for Path objects.
+ */
+class PathScurryDarwin extends PathScurryPosix {
+    constructor(cwd = process.cwd(), opts = {}) {
+        const { nocase = true } = opts;
+        super(cwd, { ...opts, nocase });
+    }
+}
+exports.PathScurryDarwin = PathScurryDarwin;
+/**
+ * Default {@link PathBase} implementation for the current platform.
+ *
+ * {@link PathWin32} on Windows systems, {@link PathPosix} on all others.
+ */
+exports.Path = process.platform === 'win32' ? PathWin32 : PathPosix;
+/**
+ * Default {@link PathScurryBase} implementation for the current platform.
+ *
+ * {@link PathScurryWin32} on Windows systems, {@link PathScurryDarwin} on
+ * Darwin (macOS) systems, {@link PathScurryPosix} on all others.
+ */
+exports.PathScurry = process.platform === 'win32'
+    ? PathScurryWin32
+    : process.platform === 'darwin'
+        ? PathScurryDarwin
+        : PathScurryPosix;
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ 758:
+/***/ ((module) => {
+
+const perf =
+  typeof performance === 'object' &&
+  performance &&
+  typeof performance.now === 'function'
+    ? performance
+    : Date
+
+const hasAbortController = typeof AbortController === 'function'
+
+// minimal backwards-compatibility polyfill
+// this doesn't have nearly all the checks and whatnot that
+// actual AbortController/Signal has, but it's enough for
+// our purposes, and if used properly, behaves the same.
+const AC = hasAbortController
+  ? AbortController
+  : class AbortController {
+      constructor() {
+        this.signal = new AS()
+      }
+      abort(reason = new Error('This operation was aborted')) {
+        this.signal.reason = reason
+        this.signal.dispatchEvent({
+          type: 'abort',
+          target: this.signal,
+        })
+      }
+    }
+
+const hasAbortSignal = typeof AbortSignal === 'function'
+// Some polyfills put this on the AC class, not global
+const hasACAbortSignal = typeof AC.AbortSignal === 'function'
+const AS = hasAbortSignal
+  ? AbortSignal
+  : hasACAbortSignal
+  ? AC.AbortController
+  : class AbortSignal {
+      constructor() {
+        this.reason = undefined
+        this.aborted = false
+        this._listeners = []
+      }
+      dispatchEvent(e) {
+        if (e.type === 'abort') {
+          this.aborted = true
+          this.onabort(e)
+          this._listeners.forEach(f => f(e), this)
+        }
+      }
+      onabort() {}
+      addEventListener(ev, fn) {
+        if (ev === 'abort') {
+          this._listeners.push(fn)
+        }
+      }
+      removeEventListener(ev, fn) {
+        if (ev === 'abort') {
+          this._listeners = this._listeners.filter(f => f !== fn)
+        }
+      }
+    }
+
+const warned = new Set()
+const deprecatedOption = (opt, instead) => {
+  const code = `LRU_CACHE_OPTION_${opt}`
+  if (shouldWarn(code)) {
+    warn(code, `${opt} option`, `options.${instead}`, LRUCache)
+  }
+}
+const deprecatedMethod = (method, instead) => {
+  const code = `LRU_CACHE_METHOD_${method}`
+  if (shouldWarn(code)) {
+    const { prototype } = LRUCache
+    const { get } = Object.getOwnPropertyDescriptor(prototype, method)
+    warn(code, `${method} method`, `cache.${instead}()`, get)
+  }
+}
+const deprecatedProperty = (field, instead) => {
+  const code = `LRU_CACHE_PROPERTY_${field}`
+  if (shouldWarn(code)) {
+    const { prototype } = LRUCache
+    const { get } = Object.getOwnPropertyDescriptor(prototype, field)
+    warn(code, `${field} property`, `cache.${instead}`, get)
+  }
+}
+
+const emitWarning = (...a) => {
+  typeof process === 'object' &&
+  process &&
+  typeof process.emitWarning === 'function'
+    ? process.emitWarning(...a)
+    : console.error(...a)
+}
+
+const shouldWarn = code => !warned.has(code)
+
+const warn = (code, what, instead, fn) => {
+  warned.add(code)
+  const msg = `The ${what} is deprecated. Please use ${instead} instead.`
+  emitWarning(msg, 'DeprecationWarning', code, fn)
+}
+
+const isPosInt = n => n && n === Math.floor(n) && n > 0 && isFinite(n)
+
+/* istanbul ignore next - This is a little bit ridiculous, tbh.
+ * The maximum array length is 2^32-1 or thereabouts on most JS impls.
+ * And well before that point, you're caching the entire world, I mean,
+ * that's ~32GB of just integers for the next/prev links, plus whatever
+ * else to hold that many keys and values.  Just filling the memory with
+ * zeroes at init time is brutal when you get that big.
+ * But why not be complete?
+ * Maybe in the future, these limits will have expanded. */
+const getUintArray = max =>
+  !isPosInt(max)
+    ? null
+    : max <= Math.pow(2, 8)
+    ? Uint8Array
+    : max <= Math.pow(2, 16)
+    ? Uint16Array
+    : max <= Math.pow(2, 32)
+    ? Uint32Array
+    : max <= Number.MAX_SAFE_INTEGER
+    ? ZeroArray
+    : null
+
+class ZeroArray extends Array {
+  constructor(size) {
+    super(size)
+    this.fill(0)
+  }
+}
+
+class Stack {
+  constructor(max) {
+    if (max === 0) {
+      return []
+    }
+    const UintArray = getUintArray(max)
+    this.heap = new UintArray(max)
+    this.length = 0
+  }
+  push(n) {
+    this.heap[this.length++] = n
+  }
+  pop() {
+    return this.heap[--this.length]
+  }
+}
+
+class LRUCache {
+  constructor(options = {}) {
+    const {
+      max = 0,
+      ttl,
+      ttlResolution = 1,
+      ttlAutopurge,
+      updateAgeOnGet,
+      updateAgeOnHas,
+      allowStale,
+      dispose,
+      disposeAfter,
+      noDisposeOnSet,
+      noUpdateTTL,
+      maxSize = 0,
+      maxEntrySize = 0,
+      sizeCalculation,
+      fetchMethod,
+      fetchContext,
+      noDeleteOnFetchRejection,
+      noDeleteOnStaleGet,
+      allowStaleOnFetchRejection,
+      allowStaleOnFetchAbort,
+      ignoreFetchAbort,
+    } = options
+
+    // deprecated options, don't trigger a warning for getting them if
+    // the thing being passed in is another LRUCache we're copying.
+    const { length, maxAge, stale } =
+      options instanceof LRUCache ? {} : options
+
+    if (max !== 0 && !isPosInt(max)) {
+      throw new TypeError('max option must be a nonnegative integer')
+    }
+
+    const UintArray = max ? getUintArray(max) : Array
+    if (!UintArray) {
+      throw new Error('invalid max value: ' + max)
+    }
+
+    this.max = max
+    this.maxSize = maxSize
+    this.maxEntrySize = maxEntrySize || this.maxSize
+    this.sizeCalculation = sizeCalculation || length
+    if (this.sizeCalculation) {
+      if (!this.maxSize && !this.maxEntrySize) {
+        throw new TypeError(
+          'cannot set sizeCalculation without setting maxSize or maxEntrySize'
+        )
+      }
+      if (typeof this.sizeCalculation !== 'function') {
+        throw new TypeError('sizeCalculation set to non-function')
+      }
+    }
+
+    this.fetchMethod = fetchMethod || null
+    if (this.fetchMethod && typeof this.fetchMethod !== 'function') {
+      throw new TypeError(
+        'fetchMethod must be a function if specified'
+      )
+    }
+
+    this.fetchContext = fetchContext
+    if (!this.fetchMethod && fetchContext !== undefined) {
+      throw new TypeError(
+        'cannot set fetchContext without fetchMethod'
+      )
+    }
+
+    this.keyMap = new Map()
+    this.keyList = new Array(max).fill(null)
+    this.valList = new Array(max).fill(null)
+    this.next = new UintArray(max)
+    this.prev = new UintArray(max)
+    this.head = 0
+    this.tail = 0
+    this.free = new Stack(max)
+    this.initialFill = 1
+    this.size = 0
+
+    if (typeof dispose === 'function') {
+      this.dispose = dispose
+    }
+    if (typeof disposeAfter === 'function') {
+      this.disposeAfter = disposeAfter
+      this.disposed = []
+    } else {
+      this.disposeAfter = null
+      this.disposed = null
+    }
+    this.noDisposeOnSet = !!noDisposeOnSet
+    this.noUpdateTTL = !!noUpdateTTL
+    this.noDeleteOnFetchRejection = !!noDeleteOnFetchRejection
+    this.allowStaleOnFetchRejection = !!allowStaleOnFetchRejection
+    this.allowStaleOnFetchAbort = !!allowStaleOnFetchAbort
+    this.ignoreFetchAbort = !!ignoreFetchAbort
+
+    // NB: maxEntrySize is set to maxSize if it's set
+    if (this.maxEntrySize !== 0) {
+      if (this.maxSize !== 0) {
+        if (!isPosInt(this.maxSize)) {
+          throw new TypeError(
+            'maxSize must be a positive integer if specified'
+          )
+        }
+      }
+      if (!isPosInt(this.maxEntrySize)) {
+        throw new TypeError(
+          'maxEntrySize must be a positive integer if specified'
+        )
+      }
+      this.initializeSizeTracking()
+    }
+
+    this.allowStale = !!allowStale || !!stale
+    this.noDeleteOnStaleGet = !!noDeleteOnStaleGet
+    this.updateAgeOnGet = !!updateAgeOnGet
+    this.updateAgeOnHas = !!updateAgeOnHas
+    this.ttlResolution =
+      isPosInt(ttlResolution) || ttlResolution === 0
+        ? ttlResolution
+        : 1
+    this.ttlAutopurge = !!ttlAutopurge
+    this.ttl = ttl || maxAge || 0
+    if (this.ttl) {
+      if (!isPosInt(this.ttl)) {
+        throw new TypeError(
+          'ttl must be a positive integer if specified'
+        )
+      }
+      this.initializeTTLTracking()
+    }
+
+    // do not allow completely unbounded caches
+    if (this.max === 0 && this.ttl === 0 && this.maxSize === 0) {
+      throw new TypeError(
+        'At least one of max, maxSize, or ttl is required'
+      )
+    }
+    if (!this.ttlAutopurge && !this.max && !this.maxSize) {
+      const code = 'LRU_CACHE_UNBOUNDED'
+      if (shouldWarn(code)) {
+        warned.add(code)
+        const msg =
+          'TTL caching without ttlAutopurge, max, or maxSize can ' +
+          'result in unbounded memory consumption.'
+        emitWarning(msg, 'UnboundedCacheWarning', code, LRUCache)
+      }
+    }
+
+    if (stale) {
+      deprecatedOption('stale', 'allowStale')
+    }
+    if (maxAge) {
+      deprecatedOption('maxAge', 'ttl')
+    }
+    if (length) {
+      deprecatedOption('length', 'sizeCalculation')
+    }
+  }
+
+  getRemainingTTL(key) {
+    return this.has(key, { updateAgeOnHas: false }) ? Infinity : 0
+  }
+
+  initializeTTLTracking() {
+    this.ttls = new ZeroArray(this.max)
+    this.starts = new ZeroArray(this.max)
+
+    this.setItemTTL = (index, ttl, start = perf.now()) => {
+      this.starts[index] = ttl !== 0 ? start : 0
+      this.ttls[index] = ttl
+      if (ttl !== 0 && this.ttlAutopurge) {
+        const t = setTimeout(() => {
+          if (this.isStale(index)) {
+            this.delete(this.keyList[index])
+          }
+        }, ttl + 1)
+        /* istanbul ignore else - unref() not supported on all platforms */
+        if (t.unref) {
+          t.unref()
+        }
+      }
+    }
+
+    this.updateItemAge = index => {
+      this.starts[index] = this.ttls[index] !== 0 ? perf.now() : 0
+    }
+
+    // debounce calls to perf.now() to 1s so we're not hitting
+    // that costly call repeatedly.
+    let cachedNow = 0
+    const getNow = () => {
+      const n = perf.now()
+      if (this.ttlResolution > 0) {
+        cachedNow = n
+        const t = setTimeout(
+          () => (cachedNow = 0),
+          this.ttlResolution
+        )
+        /* istanbul ignore else - not available on all platforms */
+        if (t.unref) {
+          t.unref()
+        }
+      }
+      return n
+    }
+
+    this.getRemainingTTL = key => {
+      const index = this.keyMap.get(key)
+      if (index === undefined) {
+        return 0
+      }
+      return this.ttls[index] === 0 || this.starts[index] === 0
+        ? Infinity
+        : this.starts[index] +
+            this.ttls[index] -
+            (cachedNow || getNow())
+    }
+
+    this.isStale = index => {
+      return (
+        this.ttls[index] !== 0 &&
+        this.starts[index] !== 0 &&
+        (cachedNow || getNow()) - this.starts[index] >
+          this.ttls[index]
+      )
+    }
+  }
+  updateItemAge(_index) {}
+  setItemTTL(_index, _ttl, _start) {}
+  isStale(_index) {
+    return false
+  }
+
+  initializeSizeTracking() {
+    this.calculatedSize = 0
+    this.sizes = new ZeroArray(this.max)
+    this.removeItemSize = index => {
+      this.calculatedSize -= this.sizes[index]
+      this.sizes[index] = 0
+    }
+    this.requireSize = (k, v, size, sizeCalculation) => {
+      // provisionally accept background fetches.
+      // actual value size will be checked when they return.
+      if (this.isBackgroundFetch(v)) {
+        return 0
+      }
+      if (!isPosInt(size)) {
+        if (sizeCalculation) {
+          if (typeof sizeCalculation !== 'function') {
+            throw new TypeError('sizeCalculation must be a function')
+          }
+          size = sizeCalculation(v, k)
+          if (!isPosInt(size)) {
+            throw new TypeError(
+              'sizeCalculation return invalid (expect positive integer)'
+            )
+          }
+        } else {
+          throw new TypeError(
+            'invalid size value (must be positive integer). ' +
+              'When maxSize or maxEntrySize is used, sizeCalculation or size ' +
+              'must be set.'
+          )
+        }
+      }
+      return size
+    }
+    this.addItemSize = (index, size) => {
+      this.sizes[index] = size
+      if (this.maxSize) {
+        const maxSize = this.maxSize - this.sizes[index]
+        while (this.calculatedSize > maxSize) {
+          this.evict(true)
+        }
+      }
+      this.calculatedSize += this.sizes[index]
+    }
+  }
+  removeItemSize(_index) {}
+  addItemSize(_index, _size) {}
+  requireSize(_k, _v, size, sizeCalculation) {
+    if (size || sizeCalculation) {
+      throw new TypeError(
+        'cannot set size without setting maxSize or maxEntrySize on cache'
+      )
+    }
+  }
+
+  *indexes({ allowStale = this.allowStale } = {}) {
+    if (this.size) {
+      for (let i = this.tail; true; ) {
+        if (!this.isValidIndex(i)) {
+          break
+        }
+        if (allowStale || !this.isStale(i)) {
+          yield i
+        }
+        if (i === this.head) {
+          break
+        } else {
+          i = this.prev[i]
+        }
+      }
+    }
+  }
+
+  *rindexes({ allowStale = this.allowStale } = {}) {
+    if (this.size) {
+      for (let i = this.head; true; ) {
+        if (!this.isValidIndex(i)) {
+          break
+        }
+        if (allowStale || !this.isStale(i)) {
+          yield i
+        }
+        if (i === this.tail) {
+          break
+        } else {
+          i = this.next[i]
+        }
+      }
+    }
+  }
+
+  isValidIndex(index) {
+    return this.keyMap.get(this.keyList[index]) === index
+  }
+
+  *entries() {
+    for (const i of this.indexes()) {
+      if (!this.isBackgroundFetch(this.valList[i])) {
+        yield [this.keyList[i], this.valList[i]]
+      }
+    }
+  }
+  *rentries() {
+    for (const i of this.rindexes()) {
+      if (!this.isBackgroundFetch(this.valList[i])) {
+        yield [this.keyList[i], this.valList[i]]
+      }
+    }
+  }
+
+  *keys() {
+    for (const i of this.indexes()) {
+      if (!this.isBackgroundFetch(this.valList[i])) {
+        yield this.keyList[i]
+      }
+    }
+  }
+  *rkeys() {
+    for (const i of this.rindexes()) {
+      if (!this.isBackgroundFetch(this.valList[i])) {
+        yield this.keyList[i]
+      }
+    }
+  }
+
+  *values() {
+    for (const i of this.indexes()) {
+      if (!this.isBackgroundFetch(this.valList[i])) {
+        yield this.valList[i]
+      }
+    }
+  }
+  *rvalues() {
+    for (const i of this.rindexes()) {
+      if (!this.isBackgroundFetch(this.valList[i])) {
+        yield this.valList[i]
+      }
+    }
+  }
+
+  [Symbol.iterator]() {
+    return this.entries()
+  }
+
+  find(fn, getOptions = {}) {
+    for (const i of this.indexes()) {
+      if (fn(this.valList[i], this.keyList[i], this)) {
+        return this.get(this.keyList[i], getOptions)
+      }
+    }
+  }
+
+  forEach(fn, thisp = this) {
+    for (const i of this.indexes()) {
+      fn.call(thisp, this.valList[i], this.keyList[i], this)
+    }
+  }
+
+  rforEach(fn, thisp = this) {
+    for (const i of this.rindexes()) {
+      fn.call(thisp, this.valList[i], this.keyList[i], this)
+    }
+  }
+
+  get prune() {
+    deprecatedMethod('prune', 'purgeStale')
+    return this.purgeStale
+  }
+
+  purgeStale() {
+    let deleted = false
+    for (const i of this.rindexes({ allowStale: true })) {
+      if (this.isStale(i)) {
+        this.delete(this.keyList[i])
+        deleted = true
+      }
+    }
+    return deleted
+  }
+
+  dump() {
+    const arr = []
+    for (const i of this.indexes({ allowStale: true })) {
+      const key = this.keyList[i]
+      const v = this.valList[i]
+      const value = this.isBackgroundFetch(v)
+        ? v.__staleWhileFetching
+        : v
+      if (value === undefined) continue
+      const entry = { value }
+      if (this.ttls) {
+        entry.ttl = this.ttls[i]
+        // always dump the start relative to a portable timestamp
+        // it's ok for this to be a bit slow, it's a rare operation.
+        const age = perf.now() - this.starts[i]
+        entry.start = Math.floor(Date.now() - age)
+      }
+      if (this.sizes) {
+        entry.size = this.sizes[i]
+      }
+      arr.unshift([key, entry])
+    }
+    return arr
+  }
+
+  load(arr) {
+    this.clear()
+    for (const [key, entry] of arr) {
+      if (entry.start) {
+        // entry.start is a portable timestamp, but we may be using
+        // node's performance.now(), so calculate the offset.
+        // it's ok for this to be a bit slow, it's a rare operation.
+        const age = Date.now() - entry.start
+        entry.start = perf.now() - age
+      }
+      this.set(key, entry.value, entry)
+    }
+  }
+
+  dispose(_v, _k, _reason) {}
+
+  set(
+    k,
+    v,
+    {
+      ttl = this.ttl,
+      start,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+    } = {}
+  ) {
+    size = this.requireSize(k, v, size, sizeCalculation)
+    // if the item doesn't fit, don't do anything
+    // NB: maxEntrySize set to maxSize by default
+    if (this.maxEntrySize && size > this.maxEntrySize) {
+      // have to delete, in case a background fetch is there already.
+      // in non-async cases, this is a no-op
+      this.delete(k)
+      return this
+    }
+    let index = this.size === 0 ? undefined : this.keyMap.get(k)
+    if (index === undefined) {
+      // addition
+      index = this.newIndex()
+      this.keyList[index] = k
+      this.valList[index] = v
+      this.keyMap.set(k, index)
+      this.next[this.tail] = index
+      this.prev[index] = this.tail
+      this.tail = index
+      this.size++
+      this.addItemSize(index, size)
+      noUpdateTTL = false
+    } else {
+      // update
+      this.moveToTail(index)
+      const oldVal = this.valList[index]
+      if (v !== oldVal) {
+        if (this.isBackgroundFetch(oldVal)) {
+          oldVal.__abortController.abort(new Error('replaced'))
+        } else {
+          if (!noDisposeOnSet) {
+            this.dispose(oldVal, k, 'set')
+            if (this.disposeAfter) {
+              this.disposed.push([oldVal, k, 'set'])
+            }
+          }
+        }
+        this.removeItemSize(index)
+        this.valList[index] = v
+        this.addItemSize(index, size)
+      }
+    }
+    if (ttl !== 0 && this.ttl === 0 && !this.ttls) {
+      this.initializeTTLTracking()
+    }
+    if (!noUpdateTTL) {
+      this.setItemTTL(index, ttl, start)
+    }
+    if (this.disposeAfter) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
+    }
+    return this
+  }
+
+  newIndex() {
+    if (this.size === 0) {
+      return this.tail
+    }
+    if (this.size === this.max && this.max !== 0) {
+      return this.evict(false)
+    }
+    if (this.free.length !== 0) {
+      return this.free.pop()
+    }
+    // initial fill, just keep writing down the list
+    return this.initialFill++
+  }
+
+  pop() {
+    if (this.size) {
+      const val = this.valList[this.head]
+      this.evict(true)
+      return val
+    }
+  }
+
+  evict(free) {
+    const head = this.head
+    const k = this.keyList[head]
+    const v = this.valList[head]
+    if (this.isBackgroundFetch(v)) {
+      v.__abortController.abort(new Error('evicted'))
+    } else {
+      this.dispose(v, k, 'evict')
+      if (this.disposeAfter) {
+        this.disposed.push([v, k, 'evict'])
+      }
+    }
+    this.removeItemSize(head)
+    // if we aren't about to use the index, then null these out
+    if (free) {
+      this.keyList[head] = null
+      this.valList[head] = null
+      this.free.push(head)
+    }
+    this.head = this.next[head]
+    this.keyMap.delete(k)
+    this.size--
+    return head
+  }
+
+  has(k, { updateAgeOnHas = this.updateAgeOnHas } = {}) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined) {
+      if (!this.isStale(index)) {
+        if (updateAgeOnHas) {
+          this.updateItemAge(index)
+        }
+        return true
+      }
+    }
+    return false
+  }
+
+  // like get(), but without any LRU updating or TTL expiration
+  peek(k, { allowStale = this.allowStale } = {}) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined && (allowStale || !this.isStale(index))) {
+      const v = this.valList[index]
+      // either stale and allowed, or forcing a refresh of non-stale value
+      return this.isBackgroundFetch(v) ? v.__staleWhileFetching : v
+    }
+  }
+
+  backgroundFetch(k, index, options, context) {
+    const v = index === undefined ? undefined : this.valList[index]
+    if (this.isBackgroundFetch(v)) {
+      return v
+    }
+    const ac = new AC()
+    if (options.signal) {
+      options.signal.addEventListener('abort', () =>
+        ac.abort(options.signal.reason)
+      )
+    }
+    const fetchOpts = {
+      signal: ac.signal,
+      options,
+      context,
+    }
+    const cb = (v, updateCache = false) => {
+      const { aborted } = ac.signal
+      const ignoreAbort = options.ignoreFetchAbort && v !== undefined
+      if (aborted && !ignoreAbort && !updateCache) {
+        return eb(ac.signal.reason)
+      }
+      // either we didn't abort, and are still here, or we did, and ignored
+      if (this.valList[index] === p) {
+        if (v === undefined) {
+          if (p.__staleWhileFetching) {
+            this.valList[index] = p.__staleWhileFetching
+          } else {
+            this.delete(k)
+          }
+        } else {
+          this.set(k, v, fetchOpts.options)
+        }
+      }
+      return v
+    }
+    const eb = er => {
+      const { aborted } = ac.signal
+      const allowStaleAborted =
+        aborted && options.allowStaleOnFetchAbort
+      const allowStale =
+        allowStaleAborted || options.allowStaleOnFetchRejection
+      const noDelete = allowStale || options.noDeleteOnFetchRejection
+      if (this.valList[index] === p) {
+        // if we allow stale on fetch rejections, then we need to ensure that
+        // the stale value is not removed from the cache when the fetch fails.
+        const del = !noDelete || p.__staleWhileFetching === undefined
+        if (del) {
+          this.delete(k)
+        } else if (!allowStaleAborted) {
+          // still replace the *promise* with the stale value,
+          // since we are done with the promise at this point.
+          // leave it untouched if we're still waiting for an
+          // aborted background fetch that hasn't yet returned.
+          this.valList[index] = p.__staleWhileFetching
+        }
+      }
+      if (allowStale) {
+        return p.__staleWhileFetching
+      } else if (p.__returned === p) {
+        throw er
+      }
+    }
+    const pcall = (res, rej) => {
+      this.fetchMethod(k, v, fetchOpts).then(v => res(v), rej)
+      // ignored, we go until we finish, regardless.
+      // defer check until we are actually aborting,
+      // so fetchMethod can override.
+      ac.signal.addEventListener('abort', () => {
+        if (
+          !options.ignoreFetchAbort ||
+          options.allowStaleOnFetchAbort
+        ) {
+          res()
+          // when it eventually resolves, update the cache.
+          if (options.allowStaleOnFetchAbort) {
+            res = v => cb(v, true)
+          }
+        }
+      })
+    }
+    const p = new Promise(pcall).then(cb, eb)
+    p.__abortController = ac
+    p.__staleWhileFetching = v
+    p.__returned = null
+    if (index === undefined) {
+      this.set(k, p, fetchOpts.options)
+      index = this.keyMap.get(k)
+    } else {
+      this.valList[index] = p
+    }
+    return p
+  }
+
+  isBackgroundFetch(p) {
+    return (
+      p &&
+      typeof p === 'object' &&
+      typeof p.then === 'function' &&
+      Object.prototype.hasOwnProperty.call(
+        p,
+        '__staleWhileFetching'
+      ) &&
+      Object.prototype.hasOwnProperty.call(p, '__returned') &&
+      (p.__returned === p || p.__returned === null)
+    )
+  }
+
+  // this takes the union of get() and set() opts, because it does both
+  async fetch(
+    k,
+    {
+      // get options
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+      // set options
+      ttl = this.ttl,
+      noDisposeOnSet = this.noDisposeOnSet,
+      size = 0,
+      sizeCalculation = this.sizeCalculation,
+      noUpdateTTL = this.noUpdateTTL,
+      // fetch exclusive options
+      noDeleteOnFetchRejection = this.noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection = this.allowStaleOnFetchRejection,
+      ignoreFetchAbort = this.ignoreFetchAbort,
+      allowStaleOnFetchAbort = this.allowStaleOnFetchAbort,
+      fetchContext = this.fetchContext,
+      forceRefresh = false,
+      signal,
+    } = {}
+  ) {
+    if (!this.fetchMethod) {
+      return this.get(k, {
+        allowStale,
+        updateAgeOnGet,
+        noDeleteOnStaleGet,
+      })
+    }
+
+    const options = {
+      allowStale,
+      updateAgeOnGet,
+      noDeleteOnStaleGet,
+      ttl,
+      noDisposeOnSet,
+      size,
+      sizeCalculation,
+      noUpdateTTL,
+      noDeleteOnFetchRejection,
+      allowStaleOnFetchRejection,
+      allowStaleOnFetchAbort,
+      ignoreFetchAbort,
+      signal,
+    }
+
+    let index = this.keyMap.get(k)
+    if (index === undefined) {
+      const p = this.backgroundFetch(k, index, options, fetchContext)
+      return (p.__returned = p)
+    } else {
+      // in cache, maybe already fetching
+      const v = this.valList[index]
+      if (this.isBackgroundFetch(v)) {
+        return allowStale && v.__staleWhileFetching !== undefined
+          ? v.__staleWhileFetching
+          : (v.__returned = v)
+      }
+
+      // if we force a refresh, that means do NOT serve the cached value,
+      // unless we are already in the process of refreshing the cache.
+      if (!forceRefresh && !this.isStale(index)) {
+        this.moveToTail(index)
+        if (updateAgeOnGet) {
+          this.updateItemAge(index)
+        }
+        return v
+      }
+
+      // ok, it is stale or a forced refresh, and not already fetching.
+      // refresh the cache.
+      const p = this.backgroundFetch(k, index, options, fetchContext)
+      return allowStale && p.__staleWhileFetching !== undefined
+        ? p.__staleWhileFetching
+        : (p.__returned = p)
+    }
+  }
+
+  get(
+    k,
+    {
+      allowStale = this.allowStale,
+      updateAgeOnGet = this.updateAgeOnGet,
+      noDeleteOnStaleGet = this.noDeleteOnStaleGet,
+    } = {}
+  ) {
+    const index = this.keyMap.get(k)
+    if (index !== undefined) {
+      const value = this.valList[index]
+      const fetching = this.isBackgroundFetch(value)
+      if (this.isStale(index)) {
+        // delete only if not an in-flight background fetch
+        if (!fetching) {
+          if (!noDeleteOnStaleGet) {
+            this.delete(k)
+          }
+          return allowStale ? value : undefined
+        } else {
+          return allowStale ? value.__staleWhileFetching : undefined
+        }
+      } else {
+        // if we're currently fetching it, we don't actually have it yet
+        // it's not stale, which means this isn't a staleWhileRefetching,
+        // so we just return undefined
+        if (fetching) {
+          return undefined
+        }
+        this.moveToTail(index)
+        if (updateAgeOnGet) {
+          this.updateItemAge(index)
+        }
+        return value
+      }
+    }
+  }
+
+  connect(p, n) {
+    this.prev[n] = p
+    this.next[p] = n
+  }
+
+  moveToTail(index) {
+    // if tail already, nothing to do
+    // if head, move head to next[index]
+    // else
+    //   move next[prev[index]] to next[index] (head has no prev)
+    //   move prev[next[index]] to prev[index]
+    // prev[index] = tail
+    // next[tail] = index
+    // tail = index
+    if (index !== this.tail) {
+      if (index === this.head) {
+        this.head = this.next[index]
+      } else {
+        this.connect(this.prev[index], this.next[index])
+      }
+      this.connect(this.tail, index)
+      this.tail = index
+    }
+  }
+
+  get del() {
+    deprecatedMethod('del', 'delete')
+    return this.delete
+  }
+
+  delete(k) {
+    let deleted = false
+    if (this.size !== 0) {
+      const index = this.keyMap.get(k)
+      if (index !== undefined) {
+        deleted = true
+        if (this.size === 1) {
+          this.clear()
+        } else {
+          this.removeItemSize(index)
+          const v = this.valList[index]
+          if (this.isBackgroundFetch(v)) {
+            v.__abortController.abort(new Error('deleted'))
+          } else {
+            this.dispose(v, k, 'delete')
+            if (this.disposeAfter) {
+              this.disposed.push([v, k, 'delete'])
+            }
+          }
+          this.keyMap.delete(k)
+          this.keyList[index] = null
+          this.valList[index] = null
+          if (index === this.tail) {
+            this.tail = this.prev[index]
+          } else if (index === this.head) {
+            this.head = this.next[index]
+          } else {
+            this.next[this.prev[index]] = this.next[index]
+            this.prev[this.next[index]] = this.prev[index]
+          }
+          this.size--
+          this.free.push(index)
+        }
+      }
+    }
+    if (this.disposed) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
+    }
+    return deleted
+  }
+
+  clear() {
+    for (const index of this.rindexes({ allowStale: true })) {
+      const v = this.valList[index]
+      if (this.isBackgroundFetch(v)) {
+        v.__abortController.abort(new Error('deleted'))
+      } else {
+        const k = this.keyList[index]
+        this.dispose(v, k, 'delete')
+        if (this.disposeAfter) {
+          this.disposed.push([v, k, 'delete'])
+        }
+      }
+    }
+
+    this.keyMap.clear()
+    this.valList.fill(null)
+    this.keyList.fill(null)
+    if (this.ttls) {
+      this.ttls.fill(0)
+      this.starts.fill(0)
+    }
+    if (this.sizes) {
+      this.sizes.fill(0)
+    }
+    this.head = 0
+    this.tail = 0
+    this.initialFill = 1
+    this.free.length = 0
+    this.calculatedSize = 0
+    this.size = 0
+    if (this.disposed) {
+      while (this.disposed.length) {
+        this.disposeAfter(...this.disposed.shift())
+      }
+    }
+  }
+
+  get reset() {
+    deprecatedMethod('reset', 'clear')
+    return this.clear
+  }
+
+  get length() {
+    deprecatedProperty('length', 'size')
+    return this.size
+  }
+
+  static get AbortController() {
+    return AC
+  }
+  static get AbortSignal() {
+    return AS
+  }
+}
+
+module.exports = LRUCache
+
 
 /***/ }),
 
@@ -17830,12 +22103,12 @@ function findPair(items, key) {
     return undefined;
 }
 class YAMLMap extends Collection.Collection {
+    static get tagName() {
+        return 'tag:yaml.org,2002:map';
+    }
     constructor(schema) {
         super(Node.MAP, schema);
         this.items = [];
-    }
-    static get tagName() {
-        return 'tag:yaml.org,2002:map';
     }
     /**
      * Adds a value to the collection.
@@ -17944,12 +22217,12 @@ var Scalar = __nccwpck_require__(9338);
 var toJS = __nccwpck_require__(2463);
 
 class YAMLSeq extends Collection.Collection {
+    static get tagName() {
+        return 'tag:yaml.org,2002:seq';
+    }
     constructor(schema) {
         super(Node.SEQ, schema);
         this.items = [];
-    }
-    static get tagName() {
-        return 'tag:yaml.org,2002:seq';
     }
     add(value) {
         this.items.push(value);
@@ -21942,6 +26215,7 @@ function createStringifyContext(doc, options) {
         doubleQuotedAsJSON: false,
         doubleQuotedMinMultiLineLength: 40,
         falseStr: 'false',
+        flowCollectionPadding: true,
         indentSeq: true,
         lineWidth: 80,
         minContentWidth: 20,
@@ -21965,6 +26239,7 @@ function createStringifyContext(doc, options) {
     return {
         anchors: new Set(),
         doc,
+        flowCollectionPadding: opt.flowCollectionPadding ? ' ' : '',
         indent: '',
         indentStep: typeof opt.indent === 'number' ? ' '.repeat(opt.indent) : '  ',
         inFlow,
@@ -22122,7 +26397,7 @@ function stringifyBlockCollection({ comment, items }, ctx, { blockItemPrefix, fl
     return str;
 }
 function stringifyFlowCollection({ comment, items }, ctx, { flowChars, itemIndent, onComment }) {
-    const { indent, indentStep, options: { commentString } } = ctx;
+    const { indent, indentStep, flowCollectionPadding: fcPadding, options: { commentString } } = ctx;
     itemIndent += indentStep;
     const itemCtx = Object.assign({}, ctx, {
         indent: itemIndent,
@@ -22191,7 +26466,7 @@ function stringifyFlowCollection({ comment, items }, ctx, { flowChars, itemInden
             str += `\n${indent}${end}`;
         }
         else {
-            str = `${start} ${lines.join(' ')} ${end}`;
+            str = `${start}${fcPadding}${lines.join(' ')}${fcPadding}${end}`;
         }
     }
     if (comment) {
@@ -22447,19 +26722,18 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
         if (keyComment)
             str += stringifyComment.lineComment(str, ctx.indent, commentString(keyComment));
     }
-    let vcb = '';
-    let valueComment = null;
+    let vsb, vcb, valueComment;
     if (Node.isNode(value)) {
-        if (value.spaceBefore)
-            vcb = '\n';
-        if (value.commentBefore) {
-            const cs = commentString(value.commentBefore);
-            vcb += `\n${stringifyComment.indentComment(cs, ctx.indent)}`;
-        }
+        vsb = !!value.spaceBefore;
+        vcb = value.commentBefore;
         valueComment = value.comment;
     }
-    else if (value && typeof value === 'object') {
-        value = doc.createNode(value);
+    else {
+        vsb = false;
+        vcb = null;
+        valueComment = null;
+        if (value && typeof value === 'object')
+            value = doc.createNode(value);
     }
     ctx.implicitKey = false;
     if (!explicitKey && !keyComment && Node.isScalar(value))
@@ -22474,24 +26748,50 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
         !value.tag &&
         !value.anchor) {
         // If indentSeq === false, consider '- ' as part of indentation where possible
-        ctx.indent = ctx.indent.substr(2);
+        ctx.indent = ctx.indent.substring(2);
     }
     let valueCommentDone = false;
     const valueStr = stringify.stringify(value, ctx, () => (valueCommentDone = true), () => (chompKeep = true));
     let ws = ' ';
-    if (vcb || keyComment) {
-        if (valueStr === '' && !ctx.inFlow)
-            ws = vcb === '\n' ? '\n\n' : vcb;
-        else
-            ws = `${vcb}\n${ctx.indent}`;
+    if (keyComment || vsb || vcb) {
+        ws = vsb ? '\n' : '';
+        if (vcb) {
+            const cs = commentString(vcb);
+            ws += `\n${stringifyComment.indentComment(cs, ctx.indent)}`;
+        }
+        if (valueStr === '' && !ctx.inFlow) {
+            if (ws === '\n')
+                ws = '\n\n';
+        }
+        else {
+            ws += `\n${ctx.indent}`;
+        }
     }
     else if (!explicitKey && Node.isCollection(value)) {
-        const flow = valueStr[0] === '[' || valueStr[0] === '{';
-        if (!flow || valueStr.includes('\n'))
-            ws = `\n${ctx.indent}`;
+        const vs0 = valueStr[0];
+        const nl0 = valueStr.indexOf('\n');
+        const hasNewline = nl0 !== -1;
+        const flow = ctx.inFlow ?? value.flow ?? value.items.length === 0;
+        if (hasNewline || !flow) {
+            let hasPropsLine = false;
+            if (hasNewline && (vs0 === '&' || vs0 === '!')) {
+                let sp0 = valueStr.indexOf(' ');
+                if (vs0 === '&' &&
+                    sp0 !== -1 &&
+                    sp0 < nl0 &&
+                    valueStr[sp0 + 1] === '!') {
+                    sp0 = valueStr.indexOf(' ', sp0 + 1);
+                }
+                if (sp0 === -1 || nl0 < sp0)
+                    hasPropsLine = true;
+            }
+            if (!hasPropsLine)
+                ws = `\n${ctx.indent}`;
+        }
     }
-    else if (valueStr === '' || valueStr[0] === '\n')
+    else if (valueStr === '' || valueStr[0] === '\n') {
         ws = '';
+    }
     str += ws + valueStr;
     if (ctx.inFlow) {
         if (valueCommentDone && onComment)
@@ -22749,7 +27049,7 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
 }
 function plainString(item, ctx, onComment, onChompKeep) {
     const { type, value } = item;
-    const { actualString, implicitKey, indent, inFlow } = ctx;
+    const { actualString, implicitKey, indent, indentStep, inFlow } = ctx;
     if ((implicitKey && /[\n[\]{},]/.test(value)) ||
         (inFlow && /[[\]{},]/.test(value))) {
         return quotedString(value, ctx);
@@ -22773,9 +27073,14 @@ function plainString(item, ctx, onComment, onChompKeep) {
         // Where allowed & type not set explicitly, prefer block style for multiline strings
         return blockString(item, ctx, onComment, onChompKeep);
     }
-    if (indent === '' && containsDocumentMarker(value)) {
-        ctx.forceBlockIndent = true;
-        return blockString(item, ctx, onComment, onChompKeep);
+    if (containsDocumentMarker(value)) {
+        if (indent === '') {
+            ctx.forceBlockIndent = true;
+            return blockString(item, ctx, onComment, onChompKeep);
+        }
+        else if (implicitKey && indent === indentStep) {
+            return quotedString(value, ctx);
+        }
     }
     const str = value.replace(/\n+/g, `$&\n${indent}`);
     // Verify that output will be parsed as a string, as e.g. plain numbers and
@@ -23079,11 +27384,11 @@ exports.visitAsync = visitAsync;
 
 /***/ }),
 
-/***/ 8757:
+/***/ 76:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
-// Axios v1.1.3 Copyright (c) 2022 Matt Zabriskie and contributors
+// Axios v1.3.4 Copyright (c) 2023 Matt Zabriskie and contributors
 
 
 const FormData$1 = __nccwpck_require__(4334);
@@ -23091,6 +27396,7 @@ const url = __nccwpck_require__(7310);
 const proxyFromEnv = __nccwpck_require__(3329);
 const http = __nccwpck_require__(3685);
 const https = __nccwpck_require__(5687);
+const util = __nccwpck_require__(3837);
 const followRedirects = __nccwpck_require__(7707);
 const zlib = __nccwpck_require__(9796);
 const stream = __nccwpck_require__(2781);
@@ -23102,6 +27408,7 @@ const FormData__default = /*#__PURE__*/_interopDefaultLegacy(FormData$1);
 const url__default = /*#__PURE__*/_interopDefaultLegacy(url);
 const http__default = /*#__PURE__*/_interopDefaultLegacy(http);
 const https__default = /*#__PURE__*/_interopDefaultLegacy(https);
+const util__default = /*#__PURE__*/_interopDefaultLegacy(util);
 const followRedirects__default = /*#__PURE__*/_interopDefaultLegacy(followRedirects);
 const zlib__default = /*#__PURE__*/_interopDefaultLegacy(zlib);
 const stream__default = /*#__PURE__*/_interopDefaultLegacy(stream);
@@ -23339,7 +27646,7 @@ const trim = (str) => str.trim ?
  * @param {Function} fn The callback to invoke for each item
  *
  * @param {Boolean} [allOwnKeys = false]
- * @returns {void}
+ * @returns {any}
  */
 function forEach(obj, fn, {allOwnKeys = false} = {}) {
   // Don't bother if no value provided
@@ -23374,6 +27681,28 @@ function forEach(obj, fn, {allOwnKeys = false} = {}) {
   }
 }
 
+function findKey(obj, key) {
+  key = key.toLowerCase();
+  const keys = Object.keys(obj);
+  let i = keys.length;
+  let _key;
+  while (i-- > 0) {
+    _key = keys[i];
+    if (key === _key.toLowerCase()) {
+      return _key;
+    }
+  }
+  return null;
+}
+
+const _global = (() => {
+  /*eslint no-undef:0*/
+  if (typeof globalThis !== "undefined") return globalThis;
+  return typeof self !== "undefined" ? self : (typeof window !== 'undefined' ? window : global)
+})();
+
+const isContextDefined = (context) => !isUndefined(context) && context !== _global;
+
 /**
  * Accepts varargs expecting each argument to be an object, then
  * immutably merges the properties of each object and returns result.
@@ -23393,16 +27722,18 @@ function forEach(obj, fn, {allOwnKeys = false} = {}) {
  * @returns {Object} Result of all merge properties
  */
 function merge(/* obj1, obj2, obj3, ... */) {
+  const {caseless} = isContextDefined(this) && this || {};
   const result = {};
   const assignValue = (val, key) => {
-    if (isPlainObject(result[key]) && isPlainObject(val)) {
-      result[key] = merge(result[key], val);
+    const targetKey = caseless && findKey(result, key) || key;
+    if (isPlainObject(result[targetKey]) && isPlainObject(val)) {
+      result[targetKey] = merge(result[targetKey], val);
     } else if (isPlainObject(val)) {
-      result[key] = merge({}, val);
+      result[targetKey] = merge({}, val);
     } else if (isArray(val)) {
-      result[key] = val.slice();
+      result[targetKey] = val.slice();
     } else {
-      result[key] = val;
+      result[targetKey] = val;
     }
   };
 
@@ -23599,7 +27930,7 @@ const matchAll = (regExp, str) => {
 const isHTMLForm = kindOfTest('HTMLFormElement');
 
 const toCamelCase = str => {
-  return str.toLowerCase().replace(/[_-\s]([a-z\d])(\w*)/g,
+  return str.toLowerCase().replace(/[-_\s]([a-z\d])(\w*)/g,
     function replacer(m, p1, p2) {
       return p1.toUpperCase() + p2;
     }
@@ -23638,6 +27969,11 @@ const reduceDescriptors = (obj, reducer) => {
 
 const freezeMethods = (obj) => {
   reduceDescriptors(obj, (descriptor, name) => {
+    // skip restricted props in strict mode
+    if (isFunction(obj) && ['arguments', 'caller', 'callee'].indexOf(name) !== -1) {
+      return false;
+    }
+
     const value = obj[name];
 
     if (!isFunction(value)) return;
@@ -23651,7 +27987,7 @@ const freezeMethods = (obj) => {
 
     if (!descriptor.set) {
       descriptor.set = () => {
-        throw Error('Can not read-only method \'' + name + '\'');
+        throw Error('Can not rewrite read-only method \'' + name + '\'');
       };
     }
   });
@@ -23676,6 +28012,68 @@ const noop = () => {};
 const toFiniteNumber = (value, defaultValue) => {
   value = +value;
   return Number.isFinite(value) ? value : defaultValue;
+};
+
+const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+
+const DIGIT = '0123456789';
+
+const ALPHABET = {
+  DIGIT,
+  ALPHA,
+  ALPHA_DIGIT: ALPHA + ALPHA.toUpperCase() + DIGIT
+};
+
+const generateString = (size = 16, alphabet = ALPHABET.ALPHA_DIGIT) => {
+  let str = '';
+  const {length} = alphabet;
+  while (size--) {
+    str += alphabet[Math.random() * length|0];
+  }
+
+  return str;
+};
+
+/**
+ * If the thing is a FormData object, return true, otherwise return false.
+ *
+ * @param {unknown} thing - The thing to check.
+ *
+ * @returns {boolean}
+ */
+function isSpecCompliantForm(thing) {
+  return !!(thing && isFunction(thing.append) && thing[Symbol.toStringTag] === 'FormData' && thing[Symbol.iterator]);
+}
+
+const toJSONObject = (obj) => {
+  const stack = new Array(10);
+
+  const visit = (source, i) => {
+
+    if (isObject(source)) {
+      if (stack.indexOf(source) >= 0) {
+        return;
+      }
+
+      if(!('toJSON' in source)) {
+        stack[i] = source;
+        const target = isArray(source) ? [] : {};
+
+        forEach(source, (value, key) => {
+          const reducedValue = visit(value, i + 1);
+          !isUndefined(reducedValue) && (target[key] = reducedValue);
+        });
+
+        stack[i] = undefined;
+
+        return target;
+      }
+    }
+
+    return source;
+  };
+
+  return visit(obj, 0);
 };
 
 const utils = {
@@ -23720,7 +28118,14 @@ const utils = {
   toObjectSet,
   toCamelCase,
   noop,
-  toFiniteNumber
+  toFiniteNumber,
+  findKey,
+  global: _global,
+  isContextDefined,
+  ALPHABET,
+  generateString,
+  isSpecCompliantForm,
+  toJSONObject
 };
 
 /**
@@ -23766,7 +28171,7 @@ utils.inherits(AxiosError, Error, {
       columnNumber: this.columnNumber,
       stack: this.stack,
       // Axios
-      config: this.config,
+      config: utils.toJSONObject(this.config),
       code: this.code,
       status: this.response && this.response.status ? this.response.status : null
     };
@@ -23874,17 +28279,6 @@ const predicates = utils.toFlatObject(utils, {}, null, function filter(prop) {
 });
 
 /**
- * If the thing is a FormData object, return true, otherwise return false.
- *
- * @param {unknown} thing - The thing to check.
- *
- * @returns {boolean}
- */
-function isSpecCompliant(thing) {
-  return thing && utils.isFunction(thing.append) && thing[Symbol.toStringTag] === 'FormData' && thing[Symbol.iterator];
-}
-
-/**
  * Convert a data object to FormData
  *
  * @param {Object} obj
@@ -23931,7 +28325,7 @@ function toFormData(obj, formData, options) {
   const dots = options.dots;
   const indexes = options.indexes;
   const _Blob = options.Blob || typeof Blob !== 'undefined' && Blob;
-  const useBlob = _Blob && isSpecCompliant(formData);
+  const useBlob = _Blob && utils.isSpecCompliantForm(formData);
 
   if (!utils.isFunction(visitor)) {
     throw new TypeError('visitor must be a function');
@@ -23976,7 +28370,7 @@ function toFormData(obj, formData, options) {
         value = JSON.stringify(value);
       } else if (
         (utils.isArray(value) && isFlatArray(value)) ||
-        (utils.isFileList(value) || utils.endsWith(key, '[]') && (arr = utils.toArray(value))
+        ((utils.isFileList(value) || utils.endsWith(key, '[]')) && (arr = utils.toArray(value))
         )) {
         // eslint-disable-next-line no-param-reassign
         key = removeBrackets(key);
@@ -24218,6 +28612,8 @@ class InterceptorManager {
   }
 }
 
+const InterceptorManager$1 = InterceptorManager;
+
 const transitionalDefaults = {
   silentJSONParsing: true,
   forcedJSONParsing: true,
@@ -24336,6 +28732,547 @@ function formDataToJSON(formData) {
   return null;
 }
 
+const DEFAULT_CONTENT_TYPE = {
+  'Content-Type': undefined
+};
+
+/**
+ * It takes a string, tries to parse it, and if it fails, it returns the stringified version
+ * of the input
+ *
+ * @param {any} rawValue - The value to be stringified.
+ * @param {Function} parser - A function that parses a string into a JavaScript object.
+ * @param {Function} encoder - A function that takes a value and returns a string.
+ *
+ * @returns {string} A stringified version of the rawValue.
+ */
+function stringifySafely(rawValue, parser, encoder) {
+  if (utils.isString(rawValue)) {
+    try {
+      (parser || JSON.parse)(rawValue);
+      return utils.trim(rawValue);
+    } catch (e) {
+      if (e.name !== 'SyntaxError') {
+        throw e;
+      }
+    }
+  }
+
+  return (encoder || JSON.stringify)(rawValue);
+}
+
+const defaults = {
+
+  transitional: transitionalDefaults,
+
+  adapter: ['xhr', 'http'],
+
+  transformRequest: [function transformRequest(data, headers) {
+    const contentType = headers.getContentType() || '';
+    const hasJSONContentType = contentType.indexOf('application/json') > -1;
+    const isObjectPayload = utils.isObject(data);
+
+    if (isObjectPayload && utils.isHTMLForm(data)) {
+      data = new FormData(data);
+    }
+
+    const isFormData = utils.isFormData(data);
+
+    if (isFormData) {
+      if (!hasJSONContentType) {
+        return data;
+      }
+      return hasJSONContentType ? JSON.stringify(formDataToJSON(data)) : data;
+    }
+
+    if (utils.isArrayBuffer(data) ||
+      utils.isBuffer(data) ||
+      utils.isStream(data) ||
+      utils.isFile(data) ||
+      utils.isBlob(data)
+    ) {
+      return data;
+    }
+    if (utils.isArrayBufferView(data)) {
+      return data.buffer;
+    }
+    if (utils.isURLSearchParams(data)) {
+      headers.setContentType('application/x-www-form-urlencoded;charset=utf-8', false);
+      return data.toString();
+    }
+
+    let isFileList;
+
+    if (isObjectPayload) {
+      if (contentType.indexOf('application/x-www-form-urlencoded') > -1) {
+        return toURLEncodedForm(data, this.formSerializer).toString();
+      }
+
+      if ((isFileList = utils.isFileList(data)) || contentType.indexOf('multipart/form-data') > -1) {
+        const _FormData = this.env && this.env.FormData;
+
+        return toFormData(
+          isFileList ? {'files[]': data} : data,
+          _FormData && new _FormData(),
+          this.formSerializer
+        );
+      }
+    }
+
+    if (isObjectPayload || hasJSONContentType ) {
+      headers.setContentType('application/json', false);
+      return stringifySafely(data);
+    }
+
+    return data;
+  }],
+
+  transformResponse: [function transformResponse(data) {
+    const transitional = this.transitional || defaults.transitional;
+    const forcedJSONParsing = transitional && transitional.forcedJSONParsing;
+    const JSONRequested = this.responseType === 'json';
+
+    if (data && utils.isString(data) && ((forcedJSONParsing && !this.responseType) || JSONRequested)) {
+      const silentJSONParsing = transitional && transitional.silentJSONParsing;
+      const strictJSONParsing = !silentJSONParsing && JSONRequested;
+
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        if (strictJSONParsing) {
+          if (e.name === 'SyntaxError') {
+            throw AxiosError.from(e, AxiosError.ERR_BAD_RESPONSE, this, null, this.response);
+          }
+          throw e;
+        }
+      }
+    }
+
+    return data;
+  }],
+
+  /**
+   * A timeout in milliseconds to abort a request. If set to 0 (default) a
+   * timeout is not created.
+   */
+  timeout: 0,
+
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN',
+
+  maxContentLength: -1,
+  maxBodyLength: -1,
+
+  env: {
+    FormData: platform.classes.FormData,
+    Blob: platform.classes.Blob
+  },
+
+  validateStatus: function validateStatus(status) {
+    return status >= 200 && status < 300;
+  },
+
+  headers: {
+    common: {
+      'Accept': 'application/json, text/plain, */*'
+    }
+  }
+};
+
+utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
+  defaults.headers[method] = {};
+});
+
+utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
+  defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
+});
+
+const defaults$1 = defaults;
+
+// RawAxiosHeaders whose duplicates are ignored by node
+// c.f. https://nodejs.org/api/http.html#http_message_headers
+const ignoreDuplicateOf = utils.toObjectSet([
+  'age', 'authorization', 'content-length', 'content-type', 'etag',
+  'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since',
+  'last-modified', 'location', 'max-forwards', 'proxy-authorization',
+  'referer', 'retry-after', 'user-agent'
+]);
+
+/**
+ * Parse headers into an object
+ *
+ * ```
+ * Date: Wed, 27 Aug 2014 08:58:49 GMT
+ * Content-Type: application/json
+ * Connection: keep-alive
+ * Transfer-Encoding: chunked
+ * ```
+ *
+ * @param {String} rawHeaders Headers needing to be parsed
+ *
+ * @returns {Object} Headers parsed into an object
+ */
+const parseHeaders = rawHeaders => {
+  const parsed = {};
+  let key;
+  let val;
+  let i;
+
+  rawHeaders && rawHeaders.split('\n').forEach(function parser(line) {
+    i = line.indexOf(':');
+    key = line.substring(0, i).trim().toLowerCase();
+    val = line.substring(i + 1).trim();
+
+    if (!key || (parsed[key] && ignoreDuplicateOf[key])) {
+      return;
+    }
+
+    if (key === 'set-cookie') {
+      if (parsed[key]) {
+        parsed[key].push(val);
+      } else {
+        parsed[key] = [val];
+      }
+    } else {
+      parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
+    }
+  });
+
+  return parsed;
+};
+
+const $internals = Symbol('internals');
+
+function normalizeHeader(header) {
+  return header && String(header).trim().toLowerCase();
+}
+
+function normalizeValue(value) {
+  if (value === false || value == null) {
+    return value;
+  }
+
+  return utils.isArray(value) ? value.map(normalizeValue) : String(value);
+}
+
+function parseTokens(str) {
+  const tokens = Object.create(null);
+  const tokensRE = /([^\s,;=]+)\s*(?:=\s*([^,;]+))?/g;
+  let match;
+
+  while ((match = tokensRE.exec(str))) {
+    tokens[match[1]] = match[2];
+  }
+
+  return tokens;
+}
+
+function isValidHeaderName(str) {
+  return /^[-_a-zA-Z]+$/.test(str.trim());
+}
+
+function matchHeaderValue(context, value, header, filter, isHeaderNameFilter) {
+  if (utils.isFunction(filter)) {
+    return filter.call(this, value, header);
+  }
+
+  if (isHeaderNameFilter) {
+    value = header;
+  }
+
+  if (!utils.isString(value)) return;
+
+  if (utils.isString(filter)) {
+    return value.indexOf(filter) !== -1;
+  }
+
+  if (utils.isRegExp(filter)) {
+    return filter.test(value);
+  }
+}
+
+function formatHeader(header) {
+  return header.trim()
+    .toLowerCase().replace(/([a-z\d])(\w*)/g, (w, char, str) => {
+      return char.toUpperCase() + str;
+    });
+}
+
+function buildAccessors(obj, header) {
+  const accessorName = utils.toCamelCase(' ' + header);
+
+  ['get', 'set', 'has'].forEach(methodName => {
+    Object.defineProperty(obj, methodName + accessorName, {
+      value: function(arg1, arg2, arg3) {
+        return this[methodName].call(this, header, arg1, arg2, arg3);
+      },
+      configurable: true
+    });
+  });
+}
+
+class AxiosHeaders {
+  constructor(headers) {
+    headers && this.set(headers);
+  }
+
+  set(header, valueOrRewrite, rewrite) {
+    const self = this;
+
+    function setHeader(_value, _header, _rewrite) {
+      const lHeader = normalizeHeader(_header);
+
+      if (!lHeader) {
+        throw new Error('header name must be a non-empty string');
+      }
+
+      const key = utils.findKey(self, lHeader);
+
+      if(!key || self[key] === undefined || _rewrite === true || (_rewrite === undefined && self[key] !== false)) {
+        self[key || _header] = normalizeValue(_value);
+      }
+    }
+
+    const setHeaders = (headers, _rewrite) =>
+      utils.forEach(headers, (_value, _header) => setHeader(_value, _header, _rewrite));
+
+    if (utils.isPlainObject(header) || header instanceof this.constructor) {
+      setHeaders(header, valueOrRewrite);
+    } else if(utils.isString(header) && (header = header.trim()) && !isValidHeaderName(header)) {
+      setHeaders(parseHeaders(header), valueOrRewrite);
+    } else {
+      header != null && setHeader(valueOrRewrite, header, rewrite);
+    }
+
+    return this;
+  }
+
+  get(header, parser) {
+    header = normalizeHeader(header);
+
+    if (header) {
+      const key = utils.findKey(this, header);
+
+      if (key) {
+        const value = this[key];
+
+        if (!parser) {
+          return value;
+        }
+
+        if (parser === true) {
+          return parseTokens(value);
+        }
+
+        if (utils.isFunction(parser)) {
+          return parser.call(this, value, key);
+        }
+
+        if (utils.isRegExp(parser)) {
+          return parser.exec(value);
+        }
+
+        throw new TypeError('parser must be boolean|regexp|function');
+      }
+    }
+  }
+
+  has(header, matcher) {
+    header = normalizeHeader(header);
+
+    if (header) {
+      const key = utils.findKey(this, header);
+
+      return !!(key && this[key] !== undefined && (!matcher || matchHeaderValue(this, this[key], key, matcher)));
+    }
+
+    return false;
+  }
+
+  delete(header, matcher) {
+    const self = this;
+    let deleted = false;
+
+    function deleteHeader(_header) {
+      _header = normalizeHeader(_header);
+
+      if (_header) {
+        const key = utils.findKey(self, _header);
+
+        if (key && (!matcher || matchHeaderValue(self, self[key], key, matcher))) {
+          delete self[key];
+
+          deleted = true;
+        }
+      }
+    }
+
+    if (utils.isArray(header)) {
+      header.forEach(deleteHeader);
+    } else {
+      deleteHeader(header);
+    }
+
+    return deleted;
+  }
+
+  clear(matcher) {
+    const keys = Object.keys(this);
+    let i = keys.length;
+    let deleted = false;
+
+    while (i--) {
+      const key = keys[i];
+      if(!matcher || matchHeaderValue(this, this[key], key, matcher, true)) {
+        delete this[key];
+        deleted = true;
+      }
+    }
+
+    return deleted;
+  }
+
+  normalize(format) {
+    const self = this;
+    const headers = {};
+
+    utils.forEach(this, (value, header) => {
+      const key = utils.findKey(headers, header);
+
+      if (key) {
+        self[key] = normalizeValue(value);
+        delete self[header];
+        return;
+      }
+
+      const normalized = format ? formatHeader(header) : String(header).trim();
+
+      if (normalized !== header) {
+        delete self[header];
+      }
+
+      self[normalized] = normalizeValue(value);
+
+      headers[normalized] = true;
+    });
+
+    return this;
+  }
+
+  concat(...targets) {
+    return this.constructor.concat(this, ...targets);
+  }
+
+  toJSON(asStrings) {
+    const obj = Object.create(null);
+
+    utils.forEach(this, (value, header) => {
+      value != null && value !== false && (obj[header] = asStrings && utils.isArray(value) ? value.join(', ') : value);
+    });
+
+    return obj;
+  }
+
+  [Symbol.iterator]() {
+    return Object.entries(this.toJSON())[Symbol.iterator]();
+  }
+
+  toString() {
+    return Object.entries(this.toJSON()).map(([header, value]) => header + ': ' + value).join('\n');
+  }
+
+  get [Symbol.toStringTag]() {
+    return 'AxiosHeaders';
+  }
+
+  static from(thing) {
+    return thing instanceof this ? thing : new this(thing);
+  }
+
+  static concat(first, ...targets) {
+    const computed = new this(first);
+
+    targets.forEach((target) => computed.set(target));
+
+    return computed;
+  }
+
+  static accessor(header) {
+    const internals = this[$internals] = (this[$internals] = {
+      accessors: {}
+    });
+
+    const accessors = internals.accessors;
+    const prototype = this.prototype;
+
+    function defineAccessor(_header) {
+      const lHeader = normalizeHeader(_header);
+
+      if (!accessors[lHeader]) {
+        buildAccessors(prototype, _header);
+        accessors[lHeader] = true;
+      }
+    }
+
+    utils.isArray(header) ? header.forEach(defineAccessor) : defineAccessor(header);
+
+    return this;
+  }
+}
+
+AxiosHeaders.accessor(['Content-Type', 'Content-Length', 'Accept', 'Accept-Encoding', 'User-Agent', 'Authorization']);
+
+utils.freezeMethods(AxiosHeaders.prototype);
+utils.freezeMethods(AxiosHeaders);
+
+const AxiosHeaders$1 = AxiosHeaders;
+
+/**
+ * Transform the data for a request or a response
+ *
+ * @param {Array|Function} fns A single function or Array of functions
+ * @param {?Object} response The response object
+ *
+ * @returns {*} The resulting transformed data
+ */
+function transformData(fns, response) {
+  const config = this || defaults$1;
+  const context = response || config;
+  const headers = AxiosHeaders$1.from(context.headers);
+  let data = context.data;
+
+  utils.forEach(fns, function transform(fn) {
+    data = fn.call(config, data, headers.normalize(), response ? response.status : undefined);
+  });
+
+  headers.normalize();
+
+  return data;
+}
+
+function isCancel(value) {
+  return !!(value && value.__CANCEL__);
+}
+
+/**
+ * A `CanceledError` is an object that is thrown when an operation is canceled.
+ *
+ * @param {string=} message The message.
+ * @param {Object=} config The config.
+ * @param {Object=} request The request.
+ *
+ * @returns {CanceledError} The created error.
+ */
+function CanceledError(message, config, request) {
+  // eslint-disable-next-line no-eq-null,eqeqeq
+  AxiosError.call(this, message == null ? 'canceled' : message, AxiosError.ERR_CANCELED, config, request);
+  this.name = 'CanceledError';
+}
+
+utils.inherits(CanceledError, AxiosError, {
+  __CANCEL__: true
+});
+
 /**
  * Resolve or reject a Promise based on response status.
  *
@@ -24405,26 +29342,7 @@ function buildFullPath(baseURL, requestedURL) {
   return requestedURL;
 }
 
-const VERSION = "1.1.3";
-
-/**
- * A `CanceledError` is an object that is thrown when an operation is canceled.
- *
- * @param {string=} message The message.
- * @param {Object=} config The config.
- * @param {Object=} request The request.
- *
- * @returns {CanceledError} The created error.
- */
-function CanceledError(message, config, request) {
-  // eslint-disable-next-line no-eq-null,eqeqeq
-  AxiosError.call(this, message == null ? 'canceled' : message, AxiosError.ERR_CANCELED, config, request);
-  this.name = 'CanceledError';
-}
-
-utils.inherits(CanceledError, AxiosError, {
-  __CANCEL__: true
-});
+const VERSION = "1.3.4";
 
 function parseProtocol(url) {
   const match = /^([-+\w]{1,25})(:?\/\/|:)/.exec(url);
@@ -24478,320 +29396,6 @@ function fromDataURI(uri, asBlob, options) {
 
   throw new AxiosError('Unsupported protocol ' + protocol, AxiosError.ERR_NOT_SUPPORT);
 }
-
-// RawAxiosHeaders whose duplicates are ignored by node
-// c.f. https://nodejs.org/api/http.html#http_message_headers
-const ignoreDuplicateOf = utils.toObjectSet([
-  'age', 'authorization', 'content-length', 'content-type', 'etag',
-  'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since',
-  'last-modified', 'location', 'max-forwards', 'proxy-authorization',
-  'referer', 'retry-after', 'user-agent'
-]);
-
-/**
- * Parse headers into an object
- *
- * ```
- * Date: Wed, 27 Aug 2014 08:58:49 GMT
- * Content-Type: application/json
- * Connection: keep-alive
- * Transfer-Encoding: chunked
- * ```
- *
- * @param {String} rawHeaders Headers needing to be parsed
- *
- * @returns {Object} Headers parsed into an object
- */
-const parseHeaders = rawHeaders => {
-  const parsed = {};
-  let key;
-  let val;
-  let i;
-
-  rawHeaders && rawHeaders.split('\n').forEach(function parser(line) {
-    i = line.indexOf(':');
-    key = line.substring(0, i).trim().toLowerCase();
-    val = line.substring(i + 1).trim();
-
-    if (!key || (parsed[key] && ignoreDuplicateOf[key])) {
-      return;
-    }
-
-    if (key === 'set-cookie') {
-      if (parsed[key]) {
-        parsed[key].push(val);
-      } else {
-        parsed[key] = [val];
-      }
-    } else {
-      parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
-    }
-  });
-
-  return parsed;
-};
-
-const $internals = Symbol('internals');
-const $defaults = Symbol('defaults');
-
-function normalizeHeader(header) {
-  return header && String(header).trim().toLowerCase();
-}
-
-function normalizeValue(value) {
-  if (value === false || value == null) {
-    return value;
-  }
-
-  return utils.isArray(value) ? value.map(normalizeValue) : String(value);
-}
-
-function parseTokens(str) {
-  const tokens = Object.create(null);
-  const tokensRE = /([^\s,;=]+)\s*(?:=\s*([^,;]+))?/g;
-  let match;
-
-  while ((match = tokensRE.exec(str))) {
-    tokens[match[1]] = match[2];
-  }
-
-  return tokens;
-}
-
-function matchHeaderValue(context, value, header, filter) {
-  if (utils.isFunction(filter)) {
-    return filter.call(this, value, header);
-  }
-
-  if (!utils.isString(value)) return;
-
-  if (utils.isString(filter)) {
-    return value.indexOf(filter) !== -1;
-  }
-
-  if (utils.isRegExp(filter)) {
-    return filter.test(value);
-  }
-}
-
-function formatHeader(header) {
-  return header.trim()
-    .toLowerCase().replace(/([a-z\d])(\w*)/g, (w, char, str) => {
-      return char.toUpperCase() + str;
-    });
-}
-
-function buildAccessors(obj, header) {
-  const accessorName = utils.toCamelCase(' ' + header);
-
-  ['get', 'set', 'has'].forEach(methodName => {
-    Object.defineProperty(obj, methodName + accessorName, {
-      value: function(arg1, arg2, arg3) {
-        return this[methodName].call(this, header, arg1, arg2, arg3);
-      },
-      configurable: true
-    });
-  });
-}
-
-function findKey(obj, key) {
-  key = key.toLowerCase();
-  const keys = Object.keys(obj);
-  let i = keys.length;
-  let _key;
-  while (i-- > 0) {
-    _key = keys[i];
-    if (key === _key.toLowerCase()) {
-      return _key;
-    }
-  }
-  return null;
-}
-
-function AxiosHeaders(headers, defaults) {
-  headers && this.set(headers);
-  this[$defaults] = defaults || null;
-}
-
-Object.assign(AxiosHeaders.prototype, {
-  set: function(header, valueOrRewrite, rewrite) {
-    const self = this;
-
-    function setHeader(_value, _header, _rewrite) {
-      const lHeader = normalizeHeader(_header);
-
-      if (!lHeader) {
-        throw new Error('header name must be a non-empty string');
-      }
-
-      const key = findKey(self, lHeader);
-
-      if (key && _rewrite !== true && (self[key] === false || _rewrite === false)) {
-        return;
-      }
-
-      self[key || _header] = normalizeValue(_value);
-    }
-
-    if (utils.isPlainObject(header)) {
-      utils.forEach(header, (_value, _header) => {
-        setHeader(_value, _header, valueOrRewrite);
-      });
-    } else {
-      setHeader(valueOrRewrite, header, rewrite);
-    }
-
-    return this;
-  },
-
-  get: function(header, parser) {
-    header = normalizeHeader(header);
-
-    if (!header) return undefined;
-
-    const key = findKey(this, header);
-
-    if (key) {
-      const value = this[key];
-
-      if (!parser) {
-        return value;
-      }
-
-      if (parser === true) {
-        return parseTokens(value);
-      }
-
-      if (utils.isFunction(parser)) {
-        return parser.call(this, value, key);
-      }
-
-      if (utils.isRegExp(parser)) {
-        return parser.exec(value);
-      }
-
-      throw new TypeError('parser must be boolean|regexp|function');
-    }
-  },
-
-  has: function(header, matcher) {
-    header = normalizeHeader(header);
-
-    if (header) {
-      const key = findKey(this, header);
-
-      return !!(key && (!matcher || matchHeaderValue(this, this[key], key, matcher)));
-    }
-
-    return false;
-  },
-
-  delete: function(header, matcher) {
-    const self = this;
-    let deleted = false;
-
-    function deleteHeader(_header) {
-      _header = normalizeHeader(_header);
-
-      if (_header) {
-        const key = findKey(self, _header);
-
-        if (key && (!matcher || matchHeaderValue(self, self[key], key, matcher))) {
-          delete self[key];
-
-          deleted = true;
-        }
-      }
-    }
-
-    if (utils.isArray(header)) {
-      header.forEach(deleteHeader);
-    } else {
-      deleteHeader(header);
-    }
-
-    return deleted;
-  },
-
-  clear: function() {
-    return Object.keys(this).forEach(this.delete.bind(this));
-  },
-
-  normalize: function(format) {
-    const self = this;
-    const headers = {};
-
-    utils.forEach(this, (value, header) => {
-      const key = findKey(headers, header);
-
-      if (key) {
-        self[key] = normalizeValue(value);
-        delete self[header];
-        return;
-      }
-
-      const normalized = format ? formatHeader(header) : String(header).trim();
-
-      if (normalized !== header) {
-        delete self[header];
-      }
-
-      self[normalized] = normalizeValue(value);
-
-      headers[normalized] = true;
-    });
-
-    return this;
-  },
-
-  toJSON: function(asStrings) {
-    const obj = Object.create(null);
-
-    utils.forEach(Object.assign({}, this[$defaults] || null, this),
-      (value, header) => {
-        if (value == null || value === false) return;
-        obj[header] = asStrings && utils.isArray(value) ? value.join(', ') : value;
-      });
-
-    return obj;
-  }
-});
-
-Object.assign(AxiosHeaders, {
-  from: function(thing) {
-    if (utils.isString(thing)) {
-      return new this(parseHeaders(thing));
-    }
-    return thing instanceof this ? thing : new this(thing);
-  },
-
-  accessor: function(header) {
-    const internals = this[$internals] = (this[$internals] = {
-      accessors: {}
-    });
-
-    const accessors = internals.accessors;
-    const prototype = this.prototype;
-
-    function defineAccessor(_header) {
-      const lHeader = normalizeHeader(_header);
-
-      if (!accessors[lHeader]) {
-        buildAccessors(prototype, _header);
-        accessors[lHeader] = true;
-      }
-    }
-
-    utils.isArray(header) ? header.forEach(defineAccessor) : defineAccessor(header);
-
-    return this;
-  }
-});
-
-AxiosHeaders.accessor(['Content-Type', 'Content-Length', 'Accept', 'Accept-Encoding', 'User-Agent']);
-
-utils.freezeMethods(AxiosHeaders.prototype);
-utils.freezeMethods(AxiosHeaders);
 
 /**
  * Throttle decorator
@@ -24871,7 +29475,7 @@ function speedometer(samplesCount, min) {
 
     const passed = startedAt && now - startedAt;
 
-    return  passed ? Math.round(bytesCount * 1000 / passed) : undefined;
+    return passed ? Math.round(bytesCount * 1000 / passed) : undefined;
   };
 }
 
@@ -25058,6 +29662,166 @@ class AxiosTransformStream extends stream__default["default"].Transform{
   }
 }
 
+const AxiosTransformStream$1 = AxiosTransformStream;
+
+const {asyncIterator} = Symbol;
+
+const readBlob = async function* (blob) {
+  if (blob.stream) {
+    yield* blob.stream();
+  } else if (blob.arrayBuffer) {
+    yield await blob.arrayBuffer();
+  } else if (blob[asyncIterator]) {
+    yield* blob[asyncIterator]();
+  } else {
+    yield blob;
+  }
+};
+
+const readBlob$1 = readBlob;
+
+const BOUNDARY_ALPHABET = utils.ALPHABET.ALPHA_DIGIT + '-_';
+
+const textEncoder = new util.TextEncoder();
+
+const CRLF = '\r\n';
+const CRLF_BYTES = textEncoder.encode(CRLF);
+const CRLF_BYTES_COUNT = 2;
+
+class FormDataPart {
+  constructor(name, value) {
+    const {escapeName} = this.constructor;
+    const isStringValue = utils.isString(value);
+
+    let headers = `Content-Disposition: form-data; name="${escapeName(name)}"${
+      !isStringValue && value.name ? `; filename="${escapeName(value.name)}"` : ''
+    }${CRLF}`;
+
+    if (isStringValue) {
+      value = textEncoder.encode(String(value).replace(/\r?\n|\r\n?/g, CRLF));
+    } else {
+      headers += `Content-Type: ${value.type || "application/octet-stream"}${CRLF}`;
+    }
+
+    this.headers = textEncoder.encode(headers + CRLF);
+
+    this.contentLength = isStringValue ? value.byteLength : value.size;
+
+    this.size = this.headers.byteLength + this.contentLength + CRLF_BYTES_COUNT;
+
+    this.name = name;
+    this.value = value;
+  }
+
+  async *encode(){
+    yield this.headers;
+
+    const {value} = this;
+
+    if(utils.isTypedArray(value)) {
+      yield value;
+    } else {
+      yield* readBlob$1(value);
+    }
+
+    yield CRLF_BYTES;
+  }
+
+  static escapeName(name) {
+      return String(name).replace(/[\r\n"]/g, (match) => ({
+        '\r' : '%0D',
+        '\n' : '%0A',
+        '"' : '%22',
+      }[match]));
+  }
+}
+
+const formDataToStream = (form, headersHandler, options) => {
+  const {
+    tag = 'form-data-boundary',
+    size = 25,
+    boundary = tag + '-' + utils.generateString(size, BOUNDARY_ALPHABET)
+  } = options || {};
+
+  if(!utils.isFormData(form)) {
+    throw TypeError('FormData instance required');
+  }
+
+  if (boundary.length < 1 || boundary.length > 70) {
+    throw Error('boundary must be 10-70 characters long')
+  }
+
+  const boundaryBytes = textEncoder.encode('--' + boundary + CRLF);
+  const footerBytes = textEncoder.encode('--' + boundary + '--' + CRLF + CRLF);
+  let contentLength = footerBytes.byteLength;
+
+  const parts = Array.from(form.entries()).map(([name, value]) => {
+    const part = new FormDataPart(name, value);
+    contentLength += part.size;
+    return part;
+  });
+
+  contentLength += boundaryBytes.byteLength * parts.length;
+
+  contentLength = utils.toFiniteNumber(contentLength);
+
+  const computedHeaders = {
+    'Content-Type': `multipart/form-data; boundary=${boundary}`
+  };
+
+  if (Number.isFinite(contentLength)) {
+    computedHeaders['Content-Length'] = contentLength;
+  }
+
+  headersHandler && headersHandler(computedHeaders);
+
+  return stream.Readable.from((async function *() {
+    for(const part of parts) {
+      yield boundaryBytes;
+      yield* part.encode();
+    }
+
+    yield footerBytes;
+  })());
+};
+
+const formDataToStream$1 = formDataToStream;
+
+class ZlibHeaderTransformStream extends stream__default["default"].Transform {
+  __transform(chunk, encoding, callback) {
+    this.push(chunk);
+    callback();
+  }
+
+  _transform(chunk, encoding, callback) {
+    if (chunk.length !== 0) {
+      this._transform = this.__transform;
+
+      // Add Default Compression headers if no zlib headers are present
+      if (chunk[0] !== 120) { // Hex: 78
+        const header = Buffer.alloc(2);
+        header[0] = 120; // Hex: 78
+        header[1] = 156; // Hex: 9C 
+        this.push(header, encoding);
+      }
+    }
+
+    this.__transform(chunk, encoding, callback);
+  }
+}
+
+const ZlibHeaderTransformStream$1 = ZlibHeaderTransformStream;
+
+const zlibOptions = {
+  flush: zlib__default["default"].constants.Z_SYNC_FLUSH,
+  finishFlush: zlib__default["default"].constants.Z_SYNC_FLUSH
+};
+
+const brotliOptions = {
+  flush: zlib__default["default"].constants.BROTLI_OPERATION_FLUSH,
+  finishFlush: zlib__default["default"].constants.BROTLI_OPERATION_FLUSH
+};
+
 const isBrotliSupported = utils.isFunction(zlib__default["default"].createBrotliDecompress);
 
 const {http: httpFollow, https: httpsFollow} = followRedirects__default["default"];
@@ -25138,14 +29902,41 @@ function setProxy(options, configProxy, location) {
   };
 }
 
+const isHttpAdapterSupported = typeof process !== 'undefined' && utils.kindOf(process) === 'process';
+
+// temporary hotfix
+
+const wrapAsync = (asyncExecutor) => {
+  return new Promise((resolve, reject) => {
+    let onDone;
+    let isDone;
+
+    const done = (value, isRejected) => {
+      if (isDone) return;
+      isDone = true;
+      onDone && onDone(value, isRejected);
+    };
+
+    const _resolve = (value) => {
+      done(value);
+      resolve(value);
+    };
+
+    const _reject = (reason) => {
+      done(reason, true);
+      reject(reason);
+    };
+
+    asyncExecutor(_resolve, _reject, (onDoneHandler) => (onDone = onDoneHandler)).catch(_reject);
+  })
+};
+
 /*eslint consistent-return:0*/
-function httpAdapter(config) {
-  return new Promise(function dispatchHttpRequest(resolvePromise, rejectPromise) {
-    let data = config.data;
-    const responseType = config.responseType;
-    const responseEncoding = config.responseEncoding;
+const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
+  return wrapAsync(async function dispatchHttpRequest(resolve, reject, onDone) {
+    let {data} = config;
+    const {responseType, responseEncoding} = config;
     const method = config.method.toUpperCase();
-    let isFinished;
     let isDone;
     let rejected = false;
     let req;
@@ -25153,10 +29944,7 @@ function httpAdapter(config) {
     // temporary internal emitter until the AxiosRequest class will be implemented
     const emitter = new EventEmitter__default["default"]();
 
-    function onFinished() {
-      if (isFinished) return;
-      isFinished = true;
-
+    const onFinished = () => {
       if (config.cancelToken) {
         config.cancelToken.unsubscribe(abort);
       }
@@ -25166,28 +29954,15 @@ function httpAdapter(config) {
       }
 
       emitter.removeAllListeners();
-    }
+    };
 
-    function done(value, isRejected) {
-      if (isDone) return;
-
+    onDone((value, isRejected) => {
       isDone = true;
-
       if (isRejected) {
         rejected = true;
         onFinished();
       }
-
-      isRejected ? rejectPromise(value) : resolvePromise(value);
-    }
-
-    const resolve = function resolve(value) {
-      done(value);
-    };
-
-    const reject = function reject(value) {
-      done(value, true);
-    };
+    });
 
     function abort(reason) {
       emitter.emit('abort', !reason || reason.type ? new CanceledError(null, config, req) : reason);
@@ -25204,7 +29979,7 @@ function httpAdapter(config) {
 
     // Parse url
     const fullPath = buildFullPath(config.baseURL, config.url);
-    const parsed = new URL(fullPath);
+    const parsed = new URL(fullPath, 'http://localhost');
     const protocol = parsed.protocol || supportedProtocols[0];
 
     if (protocol === 'data:') {
@@ -25231,7 +30006,7 @@ function httpAdapter(config) {
         convertedData = convertedData.toString(responseEncoding);
 
         if (!responseEncoding || responseEncoding === 'utf8') {
-          data = utils.stripBOM(convertedData);
+          convertedData = utils.stripBOM(convertedData);
         }
       } else if (responseType === 'stream') {
         convertedData = stream__default["default"].Readable.from(convertedData);
@@ -25241,7 +30016,7 @@ function httpAdapter(config) {
         data: convertedData,
         status: 200,
         statusText: 'OK',
-        headers: {},
+        headers: new AxiosHeaders$1(),
         config
       });
     }
@@ -25254,7 +30029,7 @@ function httpAdapter(config) {
       ));
     }
 
-    const headers = AxiosHeaders.from(config.headers).normalize();
+    const headers = AxiosHeaders$1.from(config.headers).normalize();
 
     // Set User-Agent (required by some servers)
     // See https://github.com/axios/axios/issues/69
@@ -25268,9 +30043,32 @@ function httpAdapter(config) {
     let maxUploadRate = undefined;
     let maxDownloadRate = undefined;
 
-    // support for https://www.npmjs.com/package/form-data api
-    if (utils.isFormData(data) && utils.isFunction(data.getHeaders)) {
+    // support for spec compliant FormData objects
+    if (utils.isSpecCompliantForm(data)) {
+      const userBoundary = headers.getContentType(/boundary=([-_\w\d]{10,70})/i);
+
+      data = formDataToStream$1(data, (formHeaders) => {
+        headers.set(formHeaders);
+      }, {
+        tag: `axios-${VERSION}-boundary`,
+        boundary: userBoundary && userBoundary[1] || undefined
+      });
+      // support for https://www.npmjs.com/package/form-data api
+    } else if (utils.isFormData(data) && utils.isFunction(data.getHeaders)) {
       headers.set(data.getHeaders());
+
+      if (!headers.hasContentLength()) {
+        try {
+          const knownLength = await util__default["default"].promisify(data.getLength).call(data);
+          Number.isFinite(knownLength) && knownLength >= 0 && headers.setContentLength(knownLength);
+          /*eslint no-empty:0*/
+        } catch (e) {
+        }
+      }
+    } else if (utils.isBlob(data)) {
+      data.size && headers.setContentType(data.type || 'application/octet-stream');
+      headers.setContentLength(data.size || 0);
+      data = stream__default["default"].Readable.from(readBlob$1(data));
     } else if (data && !utils.isStream(data)) {
       if (Buffer.isBuffer(data)) ; else if (utils.isArrayBuffer(data)) {
         data = Buffer.from(new Uint8Array(data));
@@ -25285,7 +30083,7 @@ function httpAdapter(config) {
       }
 
       // Add Content-Length header if data exists
-      headers.set('Content-Length', data.length, false);
+      headers.setContentLength(data.length, false);
 
       if (config.maxBodyLength > -1 && data.length > config.maxBodyLength) {
         return reject(new AxiosError(
@@ -25296,7 +30094,7 @@ function httpAdapter(config) {
       }
     }
 
-    const contentLength = +headers.getContentLength();
+    const contentLength = utils.toFiniteNumber(headers.getContentLength());
 
     if (utils.isArray(maxRate)) {
       maxUploadRate = maxRate[0];
@@ -25310,8 +30108,8 @@ function httpAdapter(config) {
         data = stream__default["default"].Readable.from(data, {objectMode: false});
       }
 
-      data = stream__default["default"].pipeline([data, new AxiosTransformStream({
-        length: utils.toFiniteNumber(contentLength),
+      data = stream__default["default"].pipeline([data, new AxiosTransformStream$1({
+        length: contentLength,
         maxRate: utils.toFiniteNumber(maxUploadRate)
       })], utils.noop);
 
@@ -25354,7 +30152,10 @@ function httpAdapter(config) {
       return reject(customErr);
     }
 
-    headers.set('Accept-Encoding', 'gzip, deflate, br', false);
+    headers.set(
+      'Accept-Encoding',
+      'gzip, compress, deflate' + (isBrotliSupported ? ', br' : ''), false
+      );
 
     const options = {
       path,
@@ -25409,43 +30210,10 @@ function httpAdapter(config) {
 
       const streams = [res];
 
-      // uncompress the response body transparently if required
-      let responseStream = res;
-
-      // return the last request in case of redirects
-      const lastRequest = res.req || req;
-
-      // if decompress disabled we should not decompress
-      if (config.decompress !== false) {
-        // if no content, but headers still say that it is encoded,
-        // remove the header not confuse downstream operations
-        if (data && data.length === 0 && res.headers['content-encoding']) {
-          delete res.headers['content-encoding'];
-        }
-
-        switch (res.headers['content-encoding']) {
-        /*eslint default-case:0*/
-        case 'gzip':
-        case 'compress':
-        case 'deflate':
-          // add the unzipper to the body stream processing pipeline
-          streams.push(zlib__default["default"].createUnzip());
-
-          // remove the content-encoding in order to not confuse downstream operations
-          delete res.headers['content-encoding'];
-          break;
-        case 'br':
-          if (isBrotliSupported) {
-            streams.push(zlib__default["default"].createBrotliDecompress());
-            delete res.headers['content-encoding'];
-          }
-        }
-      }
+      const responseLength = +res.headers['content-length'];
 
       if (onDownloadProgress) {
-        const responseLength = +res.headers['content-length'];
-
-        const transformStream = new AxiosTransformStream({
+        const transformStream = new AxiosTransformStream$1({
           length: utils.toFiniteNumber(responseLength),
           maxRate: utils.toFiniteNumber(maxDownloadRate)
         });
@@ -25459,6 +30227,49 @@ function httpAdapter(config) {
         streams.push(transformStream);
       }
 
+      // decompress the response body transparently if required
+      let responseStream = res;
+
+      // return the last request in case of redirects
+      const lastRequest = res.req || req;
+
+      // if decompress disabled we should not decompress
+      if (config.decompress !== false && res.headers['content-encoding']) {
+        // if no content, but headers still say that it is encoded,
+        // remove the header not confuse downstream operations
+        if (method === 'HEAD' || res.statusCode === 204) {
+          delete res.headers['content-encoding'];
+        }
+
+        switch (res.headers['content-encoding']) {
+        /*eslint default-case:0*/
+        case 'gzip':
+        case 'x-gzip':
+        case 'compress':
+        case 'x-compress':
+          // add the unzipper to the body stream processing pipeline
+          streams.push(zlib__default["default"].createUnzip(zlibOptions));
+
+          // remove the content-encoding in order to not confuse downstream operations
+          delete res.headers['content-encoding'];
+          break;
+        case 'deflate':
+          streams.push(new ZlibHeaderTransformStream$1());
+
+          // add the unzipper to the body stream processing pipeline
+          streams.push(zlib__default["default"].createUnzip(zlibOptions));
+
+          // remove the content-encoding in order to not confuse downstream operations
+          delete res.headers['content-encoding'];
+          break;
+        case 'br':
+          if (isBrotliSupported) {
+            streams.push(zlib__default["default"].createBrotliDecompress(brotliOptions));
+            delete res.headers['content-encoding'];
+          }
+        }
+      }
+
       responseStream = streams.length > 1 ? stream__default["default"].pipeline(streams, utils.noop) : streams[0];
 
       const offListeners = stream__default["default"].finished(responseStream, () => {
@@ -25469,7 +30280,7 @@ function httpAdapter(config) {
       const response = {
         status: res.statusCode,
         statusText: res.statusMessage,
-        headers: new AxiosHeaders(res.headers),
+        headers: new AxiosHeaders$1(res.headers),
         config,
         request: lastRequest
       };
@@ -25622,7 +30433,7 @@ function httpAdapter(config) {
       req.end(data);
     }
   });
-}
+};
 
 const cookies = platform.isStandardBrowserEnv ?
 
@@ -25754,7 +30565,8 @@ function progressEventReducer(listener, isDownloadStream) {
       progress: total ? (loaded / total) : undefined,
       bytes: progressBytes,
       rate: rate ? rate : undefined,
-      estimated: rate && total && inRange ? (total - loaded) / rate : undefined
+      estimated: rate && total && inRange ? (total - loaded) / rate : undefined,
+      event: e
     };
 
     data[isDownloadStream ? 'download' : 'upload'] = true;
@@ -25763,10 +30575,12 @@ function progressEventReducer(listener, isDownloadStream) {
   };
 }
 
-function xhrAdapter(config) {
+const isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
+
+const xhrAdapter = isXHRAdapterSupported && function (config) {
   return new Promise(function dispatchXhrRequest(resolve, reject) {
     let requestData = config.data;
-    const requestHeaders = AxiosHeaders.from(config.headers).normalize();
+    const requestHeaders = AxiosHeaders$1.from(config.headers).normalize();
     const responseType = config.responseType;
     let onCanceled;
     function done() {
@@ -25779,7 +30593,7 @@ function xhrAdapter(config) {
       }
     }
 
-    if (utils.isFormData(requestData) && platform.isStandardBrowserEnv) {
+    if (utils.isFormData(requestData) && (platform.isStandardBrowserEnv || platform.isStandardBrowserWebWorkerEnv)) {
       requestHeaders.setContentType(false); // Let the browser set it
     }
 
@@ -25804,10 +30618,10 @@ function xhrAdapter(config) {
         return;
       }
       // Prepare the response
-      const responseHeaders = AxiosHeaders.from(
+      const responseHeaders = AxiosHeaders$1.from(
         'getAllResponseHeaders' in request && request.getAllResponseHeaders()
       );
-      const responseData = !responseType || responseType === 'text' ||  responseType === 'json' ?
+      const responseData = !responseType || responseType === 'text' || responseType === 'json' ?
         request.responseText : request.response;
       const response = {
         data: responseData,
@@ -25964,237 +30778,62 @@ function xhrAdapter(config) {
     // Send the request
     request.send(requestData || null);
   });
-}
+};
 
-const adapters = {
+const knownAdapters = {
   http: httpAdapter,
   xhr: xhrAdapter
 };
 
-const adapters$1 = {
-  getAdapter: (nameOrAdapter) => {
-    if(utils.isString(nameOrAdapter)){
-      const adapter = adapters[nameOrAdapter];
+utils.forEach(knownAdapters, (fn, value) => {
+  if(fn) {
+    try {
+      Object.defineProperty(fn, 'name', {value});
+    } catch (e) {
+      // eslint-disable-next-line no-empty
+    }
+    Object.defineProperty(fn, 'adapterName', {value});
+  }
+});
 
-      if (!nameOrAdapter) {
-        throw Error(
-          utils.hasOwnProp(nameOrAdapter) ?
-            `Adapter '${nameOrAdapter}' is not available in the build` :
-            `Can not resolve adapter '${nameOrAdapter}'`
+const adapters = {
+  getAdapter: (adapters) => {
+    adapters = utils.isArray(adapters) ? adapters : [adapters];
+
+    const {length} = adapters;
+    let nameOrAdapter;
+    let adapter;
+
+    for (let i = 0; i < length; i++) {
+      nameOrAdapter = adapters[i];
+      if((adapter = utils.isString(nameOrAdapter) ? knownAdapters[nameOrAdapter.toLowerCase()] : nameOrAdapter)) {
+        break;
+      }
+    }
+
+    if (!adapter) {
+      if (adapter === false) {
+        throw new AxiosError(
+          `Adapter ${nameOrAdapter} is not supported by the environment`,
+          'ERR_NOT_SUPPORT'
         );
       }
 
-      return adapter
+      throw new Error(
+        utils.hasOwnProp(knownAdapters, nameOrAdapter) ?
+          `Adapter '${nameOrAdapter}' is not available in the build` :
+          `Unknown adapter '${nameOrAdapter}'`
+      );
     }
 
-    if (!utils.isFunction(nameOrAdapter)) {
+    if (!utils.isFunction(adapter)) {
       throw new TypeError('adapter is not a function');
     }
 
-    return nameOrAdapter;
+    return adapter;
   },
-  adapters
+  adapters: knownAdapters
 };
-
-const DEFAULT_CONTENT_TYPE = {
-  'Content-Type': 'application/x-www-form-urlencoded'
-};
-
-/**
- * If the browser has an XMLHttpRequest object, use the XHR adapter, otherwise use the HTTP
- * adapter
- *
- * @returns {Function}
- */
-function getDefaultAdapter() {
-  let adapter;
-  if (typeof XMLHttpRequest !== 'undefined') {
-    // For browsers use XHR adapter
-    adapter = adapters$1.getAdapter('xhr');
-  } else if (typeof process !== 'undefined' && utils.kindOf(process) === 'process') {
-    // For node use HTTP adapter
-    adapter = adapters$1.getAdapter('http');
-  }
-  return adapter;
-}
-
-/**
- * It takes a string, tries to parse it, and if it fails, it returns the stringified version
- * of the input
- *
- * @param {any} rawValue - The value to be stringified.
- * @param {Function} parser - A function that parses a string into a JavaScript object.
- * @param {Function} encoder - A function that takes a value and returns a string.
- *
- * @returns {string} A stringified version of the rawValue.
- */
-function stringifySafely(rawValue, parser, encoder) {
-  if (utils.isString(rawValue)) {
-    try {
-      (parser || JSON.parse)(rawValue);
-      return utils.trim(rawValue);
-    } catch (e) {
-      if (e.name !== 'SyntaxError') {
-        throw e;
-      }
-    }
-  }
-
-  return (encoder || JSON.stringify)(rawValue);
-}
-
-const defaults = {
-
-  transitional: transitionalDefaults,
-
-  adapter: getDefaultAdapter(),
-
-  transformRequest: [function transformRequest(data, headers) {
-    const contentType = headers.getContentType() || '';
-    const hasJSONContentType = contentType.indexOf('application/json') > -1;
-    const isObjectPayload = utils.isObject(data);
-
-    if (isObjectPayload && utils.isHTMLForm(data)) {
-      data = new FormData(data);
-    }
-
-    const isFormData = utils.isFormData(data);
-
-    if (isFormData) {
-      if (!hasJSONContentType) {
-        return data;
-      }
-      return hasJSONContentType ? JSON.stringify(formDataToJSON(data)) : data;
-    }
-
-    if (utils.isArrayBuffer(data) ||
-      utils.isBuffer(data) ||
-      utils.isStream(data) ||
-      utils.isFile(data) ||
-      utils.isBlob(data)
-    ) {
-      return data;
-    }
-    if (utils.isArrayBufferView(data)) {
-      return data.buffer;
-    }
-    if (utils.isURLSearchParams(data)) {
-      headers.setContentType('application/x-www-form-urlencoded;charset=utf-8', false);
-      return data.toString();
-    }
-
-    let isFileList;
-
-    if (isObjectPayload) {
-      if (contentType.indexOf('application/x-www-form-urlencoded') > -1) {
-        return toURLEncodedForm(data, this.formSerializer).toString();
-      }
-
-      if ((isFileList = utils.isFileList(data)) || contentType.indexOf('multipart/form-data') > -1) {
-        const _FormData = this.env && this.env.FormData;
-
-        return toFormData(
-          isFileList ? {'files[]': data} : data,
-          _FormData && new _FormData(),
-          this.formSerializer
-        );
-      }
-    }
-
-    if (isObjectPayload || hasJSONContentType ) {
-      headers.setContentType('application/json', false);
-      return stringifySafely(data);
-    }
-
-    return data;
-  }],
-
-  transformResponse: [function transformResponse(data) {
-    const transitional = this.transitional || defaults.transitional;
-    const forcedJSONParsing = transitional && transitional.forcedJSONParsing;
-    const JSONRequested = this.responseType === 'json';
-
-    if (data && utils.isString(data) && ((forcedJSONParsing && !this.responseType) || JSONRequested)) {
-      const silentJSONParsing = transitional && transitional.silentJSONParsing;
-      const strictJSONParsing = !silentJSONParsing && JSONRequested;
-
-      try {
-        return JSON.parse(data);
-      } catch (e) {
-        if (strictJSONParsing) {
-          if (e.name === 'SyntaxError') {
-            throw AxiosError.from(e, AxiosError.ERR_BAD_RESPONSE, this, null, this.response);
-          }
-          throw e;
-        }
-      }
-    }
-
-    return data;
-  }],
-
-  /**
-   * A timeout in milliseconds to abort a request. If set to 0 (default) a
-   * timeout is not created.
-   */
-  timeout: 0,
-
-  xsrfCookieName: 'XSRF-TOKEN',
-  xsrfHeaderName: 'X-XSRF-TOKEN',
-
-  maxContentLength: -1,
-  maxBodyLength: -1,
-
-  env: {
-    FormData: platform.classes.FormData,
-    Blob: platform.classes.Blob
-  },
-
-  validateStatus: function validateStatus(status) {
-    return status >= 200 && status < 300;
-  },
-
-  headers: {
-    common: {
-      'Accept': 'application/json, text/plain, */*'
-    }
-  }
-};
-
-utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
-  defaults.headers[method] = {};
-});
-
-utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
-  defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
-});
-
-/**
- * Transform the data for a request or a response
- *
- * @param {Array|Function} fns A single function or Array of functions
- * @param {?Object} response The response object
- *
- * @returns {*} The resulting transformed data
- */
-function transformData(fns, response) {
-  const config = this || defaults;
-  const context = response || config;
-  const headers = AxiosHeaders.from(context.headers);
-  let data = context.data;
-
-  utils.forEach(fns, function transform(fn) {
-    data = fn.call(config, data, headers.normalize(), response ? response.status : undefined);
-  });
-
-  headers.normalize();
-
-  return data;
-}
-
-function isCancel(value) {
-  return !!(value && value.__CANCEL__);
-}
 
 /**
  * Throws a `CanceledError` if cancellation has been requested.
@@ -26209,7 +30848,7 @@ function throwIfCancellationRequested(config) {
   }
 
   if (config.signal && config.signal.aborted) {
-    throw new CanceledError();
+    throw new CanceledError(null, config);
   }
 }
 
@@ -26223,7 +30862,7 @@ function throwIfCancellationRequested(config) {
 function dispatchRequest(config) {
   throwIfCancellationRequested(config);
 
-  config.headers = AxiosHeaders.from(config.headers);
+  config.headers = AxiosHeaders$1.from(config.headers);
 
   // Transform request data
   config.data = transformData.call(
@@ -26231,7 +30870,11 @@ function dispatchRequest(config) {
     config.transformRequest
   );
 
-  const adapter = config.adapter || defaults.adapter;
+  if (['post', 'put', 'patch'].indexOf(config.method) !== -1) {
+    config.headers.setContentType('application/x-www-form-urlencoded', false);
+  }
+
+  const adapter = adapters.getAdapter(config.adapter || defaults$1.adapter);
 
   return adapter(config).then(function onAdapterResolution(response) {
     throwIfCancellationRequested(config);
@@ -26243,7 +30886,7 @@ function dispatchRequest(config) {
       response
     );
 
-    response.headers = AxiosHeaders.from(response.headers);
+    response.headers = AxiosHeaders$1.from(response.headers);
 
     return response;
   }, function onAdapterRejection(reason) {
@@ -26257,13 +30900,15 @@ function dispatchRequest(config) {
           config.transformResponse,
           reason.response
         );
-        reason.response.headers = AxiosHeaders.from(reason.response.headers);
+        reason.response.headers = AxiosHeaders$1.from(reason.response.headers);
       }
     }
 
     return Promise.reject(reason);
   });
 }
+
+const headersToObject = (thing) => thing instanceof AxiosHeaders$1 ? thing.toJSON() : thing;
 
 /**
  * Config-specific merge-function which creates a new config-object
@@ -26279,9 +30924,9 @@ function mergeConfig(config1, config2) {
   config2 = config2 || {};
   const config = {};
 
-  function getMergedValue(target, source) {
+  function getMergedValue(target, source, caseless) {
     if (utils.isPlainObject(target) && utils.isPlainObject(source)) {
-      return utils.merge(target, source);
+      return utils.merge.call({caseless}, target, source);
     } else if (utils.isPlainObject(source)) {
       return utils.merge({}, source);
     } else if (utils.isArray(source)) {
@@ -26291,72 +30936,73 @@ function mergeConfig(config1, config2) {
   }
 
   // eslint-disable-next-line consistent-return
-  function mergeDeepProperties(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      return getMergedValue(config1[prop], config2[prop]);
-    } else if (!utils.isUndefined(config1[prop])) {
-      return getMergedValue(undefined, config1[prop]);
+  function mergeDeepProperties(a, b, caseless) {
+    if (!utils.isUndefined(b)) {
+      return getMergedValue(a, b, caseless);
+    } else if (!utils.isUndefined(a)) {
+      return getMergedValue(undefined, a, caseless);
     }
   }
 
   // eslint-disable-next-line consistent-return
-  function valueFromConfig2(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      return getMergedValue(undefined, config2[prop]);
+  function valueFromConfig2(a, b) {
+    if (!utils.isUndefined(b)) {
+      return getMergedValue(undefined, b);
     }
   }
 
   // eslint-disable-next-line consistent-return
-  function defaultToConfig2(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      return getMergedValue(undefined, config2[prop]);
-    } else if (!utils.isUndefined(config1[prop])) {
-      return getMergedValue(undefined, config1[prop]);
+  function defaultToConfig2(a, b) {
+    if (!utils.isUndefined(b)) {
+      return getMergedValue(undefined, b);
+    } else if (!utils.isUndefined(a)) {
+      return getMergedValue(undefined, a);
     }
   }
 
   // eslint-disable-next-line consistent-return
-  function mergeDirectKeys(prop) {
+  function mergeDirectKeys(a, b, prop) {
     if (prop in config2) {
-      return getMergedValue(config1[prop], config2[prop]);
+      return getMergedValue(a, b);
     } else if (prop in config1) {
-      return getMergedValue(undefined, config1[prop]);
+      return getMergedValue(undefined, a);
     }
   }
 
   const mergeMap = {
-    'url': valueFromConfig2,
-    'method': valueFromConfig2,
-    'data': valueFromConfig2,
-    'baseURL': defaultToConfig2,
-    'transformRequest': defaultToConfig2,
-    'transformResponse': defaultToConfig2,
-    'paramsSerializer': defaultToConfig2,
-    'timeout': defaultToConfig2,
-    'timeoutMessage': defaultToConfig2,
-    'withCredentials': defaultToConfig2,
-    'adapter': defaultToConfig2,
-    'responseType': defaultToConfig2,
-    'xsrfCookieName': defaultToConfig2,
-    'xsrfHeaderName': defaultToConfig2,
-    'onUploadProgress': defaultToConfig2,
-    'onDownloadProgress': defaultToConfig2,
-    'decompress': defaultToConfig2,
-    'maxContentLength': defaultToConfig2,
-    'maxBodyLength': defaultToConfig2,
-    'beforeRedirect': defaultToConfig2,
-    'transport': defaultToConfig2,
-    'httpAgent': defaultToConfig2,
-    'httpsAgent': defaultToConfig2,
-    'cancelToken': defaultToConfig2,
-    'socketPath': defaultToConfig2,
-    'responseEncoding': defaultToConfig2,
-    'validateStatus': mergeDirectKeys
+    url: valueFromConfig2,
+    method: valueFromConfig2,
+    data: valueFromConfig2,
+    baseURL: defaultToConfig2,
+    transformRequest: defaultToConfig2,
+    transformResponse: defaultToConfig2,
+    paramsSerializer: defaultToConfig2,
+    timeout: defaultToConfig2,
+    timeoutMessage: defaultToConfig2,
+    withCredentials: defaultToConfig2,
+    adapter: defaultToConfig2,
+    responseType: defaultToConfig2,
+    xsrfCookieName: defaultToConfig2,
+    xsrfHeaderName: defaultToConfig2,
+    onUploadProgress: defaultToConfig2,
+    onDownloadProgress: defaultToConfig2,
+    decompress: defaultToConfig2,
+    maxContentLength: defaultToConfig2,
+    maxBodyLength: defaultToConfig2,
+    beforeRedirect: defaultToConfig2,
+    transport: defaultToConfig2,
+    httpAgent: defaultToConfig2,
+    httpsAgent: defaultToConfig2,
+    cancelToken: defaultToConfig2,
+    socketPath: defaultToConfig2,
+    responseEncoding: defaultToConfig2,
+    validateStatus: mergeDirectKeys,
+    headers: (a, b) => mergeDeepProperties(headersToObject(a), headersToObject(b), true)
   };
 
   utils.forEach(Object.keys(config1).concat(Object.keys(config2)), function computeConfigValue(prop) {
     const merge = mergeMap[prop] || mergeDeepProperties;
-    const configValue = merge(prop);
+    const configValue = merge(config1[prop], config2[prop], prop);
     (utils.isUndefined(configValue) && merge !== mergeDirectKeys) || (config[prop] = configValue);
   });
 
@@ -26463,8 +31109,8 @@ class Axios {
   constructor(instanceConfig) {
     this.defaults = instanceConfig;
     this.interceptors = {
-      request: new InterceptorManager(),
-      response: new InterceptorManager()
+      request: new InterceptorManager$1(),
+      response: new InterceptorManager$1()
     };
   }
 
@@ -26488,7 +31134,7 @@ class Axios {
 
     config = mergeConfig(this.defaults, config);
 
-    const {transitional, paramsSerializer} = config;
+    const {transitional, paramsSerializer, headers} = config;
 
     if (transitional !== undefined) {
       validator.assertOptions(transitional, {
@@ -26508,20 +31154,22 @@ class Axios {
     // Set config.method
     config.method = (config.method || this.defaults.method || 'get').toLowerCase();
 
+    let contextHeaders;
+
     // Flatten headers
-    const defaultHeaders = config.headers && utils.merge(
-      config.headers.common,
-      config.headers[config.method]
+    contextHeaders = headers && utils.merge(
+      headers.common,
+      headers[config.method]
     );
 
-    defaultHeaders && utils.forEach(
+    contextHeaders && utils.forEach(
       ['delete', 'get', 'head', 'post', 'put', 'patch', 'common'],
-      function cleanHeaderConfig(method) {
-        delete config.headers[method];
+      (method) => {
+        delete headers[method];
       }
     );
 
-    config.headers = new AxiosHeaders(config.headers, defaultHeaders);
+    config.headers = AxiosHeaders$1.concat(contextHeaders, headers);
 
     // filter out skipped interceptors
     const requestInterceptorChain = [];
@@ -26632,6 +31280,8 @@ utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
 
   Axios.prototype[method + 'Form'] = generateHTTPMethod(true);
 });
+
+const Axios$1 = Axios;
 
 /**
  * A `CancelToken` is an object that can be used to request cancellation of an operation.
@@ -26749,6 +31399,8 @@ class CancelToken {
   }
 }
 
+const CancelToken$1 = CancelToken;
+
 /**
  * Syntactic sugar for invoking a function and expanding an array for arguments.
  *
@@ -26787,6 +31439,78 @@ function isAxiosError(payload) {
   return utils.isObject(payload) && (payload.isAxiosError === true);
 }
 
+const HttpStatusCode = {
+  Continue: 100,
+  SwitchingProtocols: 101,
+  Processing: 102,
+  EarlyHints: 103,
+  Ok: 200,
+  Created: 201,
+  Accepted: 202,
+  NonAuthoritativeInformation: 203,
+  NoContent: 204,
+  ResetContent: 205,
+  PartialContent: 206,
+  MultiStatus: 207,
+  AlreadyReported: 208,
+  ImUsed: 226,
+  MultipleChoices: 300,
+  MovedPermanently: 301,
+  Found: 302,
+  SeeOther: 303,
+  NotModified: 304,
+  UseProxy: 305,
+  Unused: 306,
+  TemporaryRedirect: 307,
+  PermanentRedirect: 308,
+  BadRequest: 400,
+  Unauthorized: 401,
+  PaymentRequired: 402,
+  Forbidden: 403,
+  NotFound: 404,
+  MethodNotAllowed: 405,
+  NotAcceptable: 406,
+  ProxyAuthenticationRequired: 407,
+  RequestTimeout: 408,
+  Conflict: 409,
+  Gone: 410,
+  LengthRequired: 411,
+  PreconditionFailed: 412,
+  PayloadTooLarge: 413,
+  UriTooLong: 414,
+  UnsupportedMediaType: 415,
+  RangeNotSatisfiable: 416,
+  ExpectationFailed: 417,
+  ImATeapot: 418,
+  MisdirectedRequest: 421,
+  UnprocessableEntity: 422,
+  Locked: 423,
+  FailedDependency: 424,
+  TooEarly: 425,
+  UpgradeRequired: 426,
+  PreconditionRequired: 428,
+  TooManyRequests: 429,
+  RequestHeaderFieldsTooLarge: 431,
+  UnavailableForLegalReasons: 451,
+  InternalServerError: 500,
+  NotImplemented: 501,
+  BadGateway: 502,
+  ServiceUnavailable: 503,
+  GatewayTimeout: 504,
+  HttpVersionNotSupported: 505,
+  VariantAlsoNegotiates: 506,
+  InsufficientStorage: 507,
+  LoopDetected: 508,
+  NotExtended: 510,
+  NetworkAuthenticationRequired: 511,
+};
+
+Object.entries(HttpStatusCode).forEach(([key, value]) => {
+  HttpStatusCode[value] = key;
+});
+
+const HttpStatusCode$1 = HttpStatusCode;
+
 /**
  * Create an instance of Axios
  *
@@ -26795,11 +31519,11 @@ function isAxiosError(payload) {
  * @returns {Axios} A new instance of Axios
  */
 function createInstance(defaultConfig) {
-  const context = new Axios(defaultConfig);
-  const instance = bind(Axios.prototype.request, context);
+  const context = new Axios$1(defaultConfig);
+  const instance = bind(Axios$1.prototype.request, context);
 
   // Copy axios.prototype to instance
-  utils.extend(instance, Axios.prototype, context, {allOwnKeys: true});
+  utils.extend(instance, Axios$1.prototype, context, {allOwnKeys: true});
 
   // Copy context to instance
   utils.extend(instance, context, null, {allOwnKeys: true});
@@ -26813,14 +31537,14 @@ function createInstance(defaultConfig) {
 }
 
 // Create the default instance to be exported
-const axios = createInstance(defaults);
+const axios = createInstance(defaults$1);
 
 // Expose Axios class to allow class inheritance
-axios.Axios = Axios;
+axios.Axios = Axios$1;
 
 // Expose Cancel & CancelToken
 axios.CanceledError = CanceledError;
-axios.CancelToken = CancelToken;
+axios.CancelToken = CancelToken$1;
 axios.isCancel = isCancel;
 axios.VERSION = VERSION;
 axios.toFormData = toFormData;
@@ -26841,9 +31565,16 @@ axios.spread = spread;
 // Expose isAxiosError
 axios.isAxiosError = isAxiosError;
 
-axios.formToJSON = thing => {
-  return formDataToJSON(utils.isHTMLForm(thing) ? new FormData(thing) : thing);
-};
+// Expose mergeConfig
+axios.mergeConfig = mergeConfig;
+
+axios.AxiosHeaders = AxiosHeaders$1;
+
+axios.formToJSON = thing => formDataToJSON(utils.isHTMLForm(thing) ? new FormData(thing) : thing);
+
+axios.HttpStatusCode = HttpStatusCode$1;
+
+axios.default = axios;
 
 module.exports = axios;
 //# sourceMappingURL=axios.cjs.map

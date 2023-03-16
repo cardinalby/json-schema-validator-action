@@ -1,0 +1,93 @@
+{
+  "http://json-schema.org/draft-03/schema": {
+    "filePath": "json-schema-draft-03.json",
+    "refs": []
+  },
+  "http://json-schema.org/draft-04/schema": {
+    "filePath": "json-schema-draft-04.json",
+    "refs": []
+  },
+  "http://json-schema.org/draft-06/schema": {
+    "filePath": "json-schema-draft-06.json",
+    "refs": []
+  },
+  "http://json-schema.org/draft-07/schema": {
+    "filePath": "json-schema-draft-07.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2019-09/meta/applicator": {
+    "filePath": "json-schema-draft-2019-09/meta/applicator.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2019-09/meta/content": {
+    "filePath": "json-schema-draft-2019-09/meta/content.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2019-09/meta/core": {
+    "filePath": "json-schema-draft-2019-09/meta/core.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2019-09/meta/format": {
+    "filePath": "json-schema-draft-2019-09/meta/format.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2019-09/meta/meta-data": {
+    "filePath": "json-schema-draft-2019-09/meta/meta-data.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2019-09/meta/validation": {
+    "filePath": "json-schema-draft-2019-09/meta/validation.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2019-09/schema": {
+    "filePath": "json-schema-draft-2019-09/schema.json",
+    "refs": [
+      "https://json-schema.org/draft/2019-09/meta/core",
+      "https://json-schema.org/draft/2019-09/meta/applicator",
+      "https://json-schema.org/draft/2019-09/meta/validation",
+      "https://json-schema.org/draft/2019-09/meta/meta-data",
+      "https://json-schema.org/draft/2019-09/meta/format",
+      "https://json-schema.org/draft/2019-09/meta/content"
+    ]
+  },
+  "https://json-schema.org/draft/2020-12/meta/applicator": {
+    "filePath": "json-schema-draft-2020-12/meta/applicator.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2020-12/meta/content": {
+    "filePath": "json-schema-draft-2020-12/meta/content.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2020-12/meta/core": {
+    "filePath": "json-schema-draft-2020-12/meta/core.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2020-12/meta/format-annotation": {
+    "filePath": "json-schema-draft-2020-12/meta/format-annotation.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2020-12/meta/meta-data": {
+    "filePath": "json-schema-draft-2020-12/meta/meta-data.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2020-12/meta/unevaluated": {
+    "filePath": "json-schema-draft-2020-12/meta/unevaluated.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2020-12/meta/validation": {
+    "filePath": "json-schema-draft-2020-12/meta/validation.json",
+    "refs": []
+  },
+  "https://json-schema.org/draft/2020-12/schema": {
+    "filePath": "json-schema-draft-2020-12/schema.json",
+    "refs": [
+      "https://json-schema.org/draft/2020-12/meta/core",
+      "https://json-schema.org/draft/2020-12/meta/applicator",
+      "https://json-schema.org/draft/2020-12/meta/unevaluated",
+      "https://json-schema.org/draft/2020-12/meta/validation",
+      "https://json-schema.org/draft/2020-12/meta/meta-data",
+      "https://json-schema.org/draft/2020-12/meta/format-annotation",
+      "https://json-schema.org/draft/2020-12/meta/content"
+    ]
+  }
+}

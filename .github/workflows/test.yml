@@ -41,35 +41,35 @@ jobs:
           echo "${{steps.actionYmlAgainstGithubActions.outputs.errorType}}" &&
           exit 1
 
-      - id: actionYmlAgainstAngular
+      - id: actionYmlAgainstWrongDraft04Schema
         name: Validate action.yml against wrong schema
         continue-on-error: true
         uses: ./
         with:
           file: 'action.yml'
-          schema: 'https://raw.githubusercontent.com/angular/angular-cli/master/packages/angular/cli/lib/config/workspace-schema.json'
+          schema: 'https://json.schemastore.org/sprite.json'
 
-      - name: Check actionYmlAgainstAngular result
+      - name: Check actionYmlAgainstWrongDraft04Schema result
         if: |
-          steps.actionYmlAgainstAngular.outputs.errorType != 'validation' ||
-          steps.actionYmlAgainstAngular.outcome != 'failure'
+          steps.actionYmlAgainstWrongDraft04Schema.outputs.errorType != 'validation' ||
+          steps.actionYmlAgainstWrongDraft04Schema.outcome != 'failure'
         run: |
-          echo "${{steps.actionYmlAgainstAngular.outputs.errorType}}" &&
-          echo "${{steps.actionYmlAgainstAngular.outcome}}" &&
+          echo "${{steps.actionYmlAgainstWrongDraft04Schema.outputs.errorType}}" &&
+          echo "${{steps.actionYmlAgainstWrongDraft04Schema.outcome}}" &&
           exit 1
 
-      - id: packageJsonAgainsLocalSchema
+      - id: packageJsonAgainstLocalSchema
         name: Validate package.json against local schema
         continue-on-error: true
         uses: ./
         with:
           file: 'package.json'
-          schema: 'tests/integration/data/package.schema.json'
+          schema: 'tests/integration/data/schemas/package.schema.json'
 
-      - name: Check packageJsonAgainsLocalSchema result
-        if: steps.packageJsonAgainsLocalSchema.outputs.errorType != ''
+      - name: Check packageJsonAgainstLocalSchema result
+        if: steps.packageJsonAgainstLocalSchema.outputs.errorType != ''
         run: |
-          echo "${{steps.packageJsonAgainsLocalSchema.outputs.errorType}}" &&
+          echo "${{steps.packageJsonAgainstLocalSchema.outputs.errorType}}" &&
           exit 1
 
       - id: useSchemaProperty
@@ -77,7 +77,8 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
-          file: 'tests/integration/data/package.schema.json'
+          file: 'tests/integration/data/schemas/package.schema.json'
+          mode: 'lax'
 
       - name: Check useSchemaProperty result
         if: steps.useSchemaProperty.outputs.errorType != ''
@@ -91,11 +92,24 @@ jobs:
         uses: ./
         with:
           file: 'tests/integration/data/files/package_*.json|tests/integration/data/files/3_package.json'
-          schema: 'tests/integration/data/package.schema.json'
-
+          schema: 'tests/integration/data/schemas/package.schema.json'
+          mode: 'lax'
 
       - name: Check validateMultipleFiles result
         if: steps.validateMultipleFiles.outputs.errorType != ''
         run: |
           echo "${{steps.validateMultipleFiles.outputs.errorType}}" &&
+          exit 1
+
+      - id: schemaAgainstDraft2020_12MetaSchema
+        name: Validate schema against Draft 2020-12 metaschema
+        continue-on-error: true
+        uses: ./
+        with:
+          file: 'tests/integration/data/schemas/2020_12_schema.json'
+
+      - name: Check schemaAgainstDraft2020_12MetaSchema result
+        if: steps.schemaAgainstDraft2020_12MetaSchema.outputs.errorType != ''
+        run: |
+          echo "${{steps.schemaAgainstDraft2020_12MetaSchema.outputs.errorType}}" &&
           exit 1

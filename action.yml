@@ -8,6 +8,16 @@ inputs:
   file:
     description: '| separated files to validate. Globs are allowed'
     required: true
+  mode:
+    description: 'schemasafe validation mode: default, lax, strong'
+    required: false
+    default: "default"
+  refSchemasMap:
+    description: 'schemas for resolving refs, JSON object: id -> file/url'
+    required: false
+  refSchemasArray:
+    description: 'schemas for resolving refs, JSON array of file/url strings'
+    required: false
 outputs:
   errorType:
     description: '`file` or `schema` or `validation`'
