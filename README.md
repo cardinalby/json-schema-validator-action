@@ -11,7 +11,7 @@ Fails if validation doesn't succeed. Uses
 
 ```yaml
 - name: Validate package.json against a local schema
-  uses: cardinalby/schema-validator-action@v1
+  uses: cardinalby/schema-validator-action@v2
   with:
     file: 'package.json'
     schema: 'schemas/package.schema.json'
@@ -19,7 +19,7 @@ Fails if validation doesn't succeed. Uses
 
 ```yaml
 - name: Validate action.yml against a remote schema
-  uses: cardinalby/schema-validator-action@v1
+  uses: cardinalby/schema-validator-action@v2
   with:
     file: 'action.yml'
     schema: 'https://json.schemastore.org/github-action.json'
@@ -27,14 +27,14 @@ Fails if validation doesn't succeed. Uses
 
 ```yaml
 - name: Validate all json files using their own $schema properties
-  uses: cardinalby/schema-validator-action@v1
+  uses: cardinalby/schema-validator-action@v2
   with:
     file: 'dir/*.json'
 ```
 
 ```yaml
 - name: Validate 3 files using the same schema
-  uses: cardinalby/schema-validator-action@v1
+  uses: cardinalby/schema-validator-action@v2
   with:
     file: 'first.json|second.json|third.json'
     schema: 'https://json.schemastore.org/swagger-2.0.json'
