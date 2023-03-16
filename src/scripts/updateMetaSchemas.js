@@ -76,6 +76,10 @@ function updateMetaSchemas() {
             ]
         }))
 
+    if (Object.keys(metaSchemas).length === 0) {
+        throw new Error("No meta-schemas have been downloaded")
+    }
+
     // Check all refs are resolving
     for (let id in metaSchemas) {
         if (metaSchemas.hasOwnProperty(id)) {
