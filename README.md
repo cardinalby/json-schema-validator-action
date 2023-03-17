@@ -70,7 +70,7 @@ JSON object should contain pairs of:
 
 Example: `{"https://my-schemas.com/schema-id": "schema_files/my.schema.json"}`
 
-### 🔸 `refSchemasAray`
+### 🔸 `refSchemasArray`
 Contains a JSON array with the schemas needed to resolve external `$ref`s in the main schema.
 JSON array should contain string elements, each pointing to schema file path or URL to download schema from.
 
