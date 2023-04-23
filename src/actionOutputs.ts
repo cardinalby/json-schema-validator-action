@@ -1,7 +1,12 @@
 import * as ghActions from '@actions/core';
-
-export const OUTPUT_ERROR_TYPE = 'errorType'
+import {ErrorType} from "./errors";
 
 export const actionOutputs = {
-    set [OUTPUT_ERROR_TYPE](value: string) { ghActions.setOutput(OUTPUT_ERROR_TYPE, value); },
+    set errorType(value: ErrorType) {
+        ghActions.setOutput('errorType' as keyof RawActionOutputs, value)
+    },
 }
+
+export type RawActionOutputs = Partial<{
+    errorType: ErrorType
+}>

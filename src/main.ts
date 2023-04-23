@@ -3,11 +3,13 @@ import {FileValidationError, ValidatorError} from "./errors";
 import {getFilePaths} from "./getFilePaths";
 import assert from "assert";
 import {resolveRefSchemas, SchemaResolver} from "./SchemaResolver";
-import {readAndParseFileData} from "./readDataFile";
+import {readDataFile} from "./parser/readDataSource";
 import {validateAgainstResolvedSchema} from "./schemasafeValidator";
 import {actionOutputs} from "./actionOutputs";
 import {ActionInputs, getActionInputs} from "./actionInputs";
 import {getIdFromSchemaProperty} from "./utils";
+import {parseObject} from "./parser/parseObject";
+import {ParserType} from "./parser/parserType";
 
 // noinspection JSUnusedLocalSymbols
 export async function run(): Promise<void> {
@@ -47,7 +49,16 @@ export async function validateFiles(inputs: ActionInputs) {
         : undefined
 
     for (let filePath of files) {
-        const parsedData = await readAndParseFileData(filePath);
+        const parsedData = await (async () => { try {
+            const fileData = await readDataFile(filePath)
+            const fileParser = inputs.fileParser === ParserType.AUTO
+                ? fileData.dataType
+                : inputs.fileParser
+            return await parseObject(fileData, fileParser)
+        } catch (err) {
+            throw new FileValidationError(String(err))
+        }})()
+
         if (!inputs.schema) {
             const schemaId = getIdFromSchemaProperty(parsedData)
             ghActions.info(`"Trying to find '${schemaId}' schema from $schema property of the file...`);

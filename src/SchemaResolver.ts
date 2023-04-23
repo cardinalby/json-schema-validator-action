@@ -1,11 +1,10 @@
 import {getSchemaId, isValidHttpUrl} from "./utils";
 import * as ghActions from "@actions/core";
-import axios from "axios";
-import * as fs from "fs-extra";
 import {hasBuiltInMetaSchema, loadBuiltInMetaSchema} from "./metaSchemas";
-import {parseObject} from "./parseObject";
+import {parseObject} from "./parser/parseObject";
 import {SchemaValidationError} from "./errors";
 import {RefSchemasMap, ResolvedSchema} from "./ResolvedSchema";
+import {readDataFile, readDataUrl} from "./parser/readDataSource";
 
 export class SchemaResolver {
     refSchemas: RefSchemasMap = new Map<string, any>()
@@ -84,9 +83,9 @@ async function loadExternalSchema(schemaPath: string): Promise<object> {
 
 async function loadSchemaFromFile(filePath: string): Promise<any> {
     try {
-        const buffer = await fs.readFile(filePath);
-        ghActions.info(`Schema loaded from '${filePath}': ${buffer.length} bytes`);
-        return parseObject(buffer.toString(), filePath);
+        const dataResult = await readDataFile(filePath);
+        ghActions.info(`Schema loaded from '${dataResult.name}'`);
+        return parseObject(dataResult, dataResult.dataType);
     } catch (err) {
         throw new SchemaValidationError(`Can't load schema from '${filePath}': ${err}`)
     }
@@ -94,14 +93,9 @@ async function loadSchemaFromFile(filePath: string): Promise<any> {
 
 async function loadSchemaFromUrl(url: string): Promise<any> {
     try {
-        const response = await axios.get(url, {
-            responseType: 'text'
-        });
-        ghActions.info(
-            `Schema loaded from ${url}: ${response.status}, ${response.headers['content-type']}, ` +
-            `${response.headers['content-length']} bytes`
-        );
-        return parseObject(response.data, url)
+        const dataResult = await readDataUrl(url)
+        ghActions.info(`Schema loaded from ${dataResult.name} has ${dataResult.dataType} type:`);
+        return parseObject(dataResult, dataResult.dataType)
     } catch (err) {
         throw new SchemaValidationError(`Can't load schema from '${url}': ${err}`)
     }

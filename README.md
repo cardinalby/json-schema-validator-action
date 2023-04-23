@@ -42,7 +42,7 @@ Fails if validation doesn't succeed. Uses
 
 ## Basic inputs
 
-### 🔸 `file` **Required**
+### 🔻 `file` **Required**
 Path to the JSON or YAML file to be validated.
 
 * Can accept a _glob_ pattern (will validate all matched files)
@@ -61,6 +61,14 @@ Sets the strictness of the schema compiling. Possible values:
 - `strong`: the most strict mode
 
 Read details in [schemasafe documentation](https://github.com/ExodusMovement/schemasafe/blob/master/doc/Options.md).
+
+### 🔸 `fileParser` _default value: "auto"_
+Determines the way files will be parsed (as JSON or as YAML). Possible values:
+- `auto` (default) - based on file extension (_json/yml/yaml_). It means, _.json_ files containing 
+yaml will lead to error. If file extension is unknown, it will behave as `json|yaml` option
+- `json` - parse all files as JSON
+- `yaml` - parse all files as YAML
+- `json|yaml` - try to parse files both with json and yaml parser (compatible with _v2_)
 
 ### 🔸 `refSchemasMap`
 Contains a JSON object with the schemas needed to resolve external `$ref`s in the main schema. 

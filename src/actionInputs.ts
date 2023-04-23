@@ -2,19 +2,24 @@ import * as ghActions from '@actions/core';
 import {isObject} from "./utils";
 import {SchemasafeMode} from "./schemasafeValidator";
 import {InputsValidationError} from "./errors";
-
-export const INPUT_SCHEMA = "schema"
-export const INPUT_FILE = "file"
-export const INPUT_MODE = "mode"
-export const INPUT_REF_SCHEMAS_MAP = "refSchemasMap"
-export const INPUT_REF_SCHEMAS_ARRAY = "refSchemasArray"
+import {ActualParserType, asActualParserType, ParserType} from "./parser/parserType";
+import {InputOptions} from "@actions/core";
 
 export interface ActionInputs {
     schema: string,
     file: string,
+    fileParser: ActualParserType[]|ParserType.AUTO
     mode: SchemasafeMode,
     refSchemasMap: Map<string, string>,
     refSchemasArray: string[]
+}
+
+export type RawActionInputs = Partial<{
+    [k in keyof ActionInputs]: string
+}>
+
+function rawInput(name: keyof ActionInputs, options?: InputOptions): string {
+    return ghActions.getInput(name, options)
 }
 
 /**
@@ -31,11 +36,12 @@ export function getActionInputs(): ActionInputs {
         }
     }
     const inputs: Partial<ActionInputs> = {
-        [INPUT_SCHEMA]: readInput(getSchemaInput),
-        [INPUT_FILE]: readInput(getFileInput),
-        [INPUT_MODE]: readInput(getModeInput),
-        [INPUT_REF_SCHEMAS_MAP]: readInput(getRefSchemasMapInput),
-        [INPUT_REF_SCHEMAS_ARRAY]: readInput(getRefSchemasArrayInput)
+        schema: readInput(getSchemaInput),
+        file: readInput(getFileInput),
+        fileParser: readInput(getFileParserInput),
+        mode: readInput(getModeInput),
+        refSchemasMap: readInput(getRefSchemasMapInput),
+        refSchemasArray: readInput(getRefSchemasArrayInput),
     }
     if (errors.length > 0) {
         throw new InputsValidationError(errors)
@@ -44,29 +50,40 @@ export function getActionInputs(): ActionInputs {
 }
 
 function getSchemaInput(): string {
-    return ghActions.getInput(INPUT_SCHEMA, {required: false})
+    return rawInput('schema', {required: false})
 }
 
 function getFileInput(): string {
-    return ghActions.getInput(INPUT_FILE, {required: true})
+    return rawInput('file', {required: true})
+}
+
+function getFileParserInput(): ActualParserType[]|ParserType.AUTO {
+    const fileParser = rawInput('fileParser', {required: true})
+    if (fileParser == ParserType.AUTO) {
+        return ParserType.AUTO
+    }
+    return fileParser
+        .split("|")
+        .map(asActualParserType)
+        .filter((t, index, arr) => arr.indexOf(t) === index)
 }
 
 function getModeInput(): SchemasafeMode {
-    const mode = ghActions.getInput(INPUT_MODE, {required: true})
+    const mode = rawInput('mode', {required: true})
     const allowedModes: SchemasafeMode[] = ['default', 'lax', 'strong']
     if (!allowedModes.includes(mode as SchemasafeMode)) {
-        throw new Error(`"${INPUT_MODE}" has unknown value "${mode}". Allowed values: ${allowedModes.join(', ')}`)
+        throw new Error(`"mode" has unknown value "${mode}". Allowed values: ${allowedModes.join(', ')}`)
     }
     return mode as SchemasafeMode
 }
 
 function getRefSchemasMapInput(): Map<string, string> {
-    const refSchemasMapStr = ghActions.getInput(INPUT_REF_SCHEMAS_MAP, {required: false})
+    const refSchemasMapStr = rawInput('refSchemasMap', {required: false})
     if (!refSchemasMapStr) {
         return new Map<string, string>
     }
     let refSchemasMap: any
-    const invalidJsonErr = new Error(`${INPUT_REF_SCHEMAS_MAP} should contain a valid {string: string} JSON object`)
+    const invalidJsonErr = new Error(`refSchemasMap should contain a valid {string: string} JSON object`)
     try {
         refSchemasMap = JSON.parse(refSchemasMapStr)
     } catch (err) {
@@ -86,12 +103,12 @@ function getRefSchemasMapInput(): Map<string, string> {
 }
 
 function getRefSchemasArrayInput(): string[] {
-    const refSchemasArrayStr = ghActions.getInput(INPUT_REF_SCHEMAS_ARRAY, {required: false})
+    const refSchemasArrayStr = rawInput('refSchemasArray', {required: false})
     if (!refSchemasArrayStr) {
         return []
     }
     let refSchemas: any
-    const invalidJsonErr = new Error(`${INPUT_REF_SCHEMAS_ARRAY} should contain a valid strings array`)
+    const invalidJsonErr = new Error(`refSchemasArray should contain a valid strings array`)
     try {
         refSchemas = JSON.parse(refSchemasArrayStr)
     } catch (err) {

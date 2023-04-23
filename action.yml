@@ -8,6 +8,10 @@ inputs:
   file:
     description: '| separated files to validate. Globs are allowed'
     required: true
+  fileParser:
+    description: '| separated list of parsers used to parse the file: json, yaml'
+    required: false
+    default: "auto"
   mode:
     description: 'schemasafe validation mode: default, lax, strong'
     required: false
