@@ -59,19 +59,15 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.resolveRefSchemas = exports.SchemaResolver = void 0;
 const utils_1 = __nccwpck_require__(918);
 const ghActions = __importStar(__nccwpck_require__(2186));
-const axios_1 = __importDefault(__nccwpck_require__(76));
-const fs = __importStar(__nccwpck_require__(5630));
 const metaSchemas_1 = __nccwpck_require__(4670);
-const parseObject_1 = __nccwpck_require__(8574);
+const parseObject_1 = __nccwpck_require__(1580);
 const errors_1 = __nccwpck_require__(9292);
 const ResolvedSchema_1 = __nccwpck_require__(9386);
+const readDataSource_1 = __nccwpck_require__(3150);
 class SchemaResolver {
     constructor() {
         this.refSchemas = new Map();
@@ -142,9 +138,9 @@ function loadExternalSchema(schemaPath) {
 function loadSchemaFromFile(filePath) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const buffer = yield fs.readFile(filePath);
-            ghActions.info(`Schema loaded from '${filePath}': ${buffer.length} bytes`);
-            return (0, parseObject_1.parseObject)(buffer.toString(), filePath);
+            const dataResult = yield (0, readDataSource_1.readDataFile)(filePath);
+            ghActions.info(`Schema loaded from '${dataResult.name}'`);
+            return (0, parseObject_1.parseObject)(dataResult, dataResult.dataType);
         }
         catch (err) {
             throw new errors_1.SchemaValidationError(`Can't load schema from '${filePath}': ${err}`);
@@ -154,12 +150,9 @@ function loadSchemaFromFile(filePath) {
 function loadSchemaFromUrl(url) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            const response = yield axios_1.default.get(url, {
-                responseType: 'text'
-            });
-            ghActions.info(`Schema loaded from ${url}: ${response.status}, ${response.headers['content-type']}, ` +
-                `${response.headers['content-length']} bytes`);
-            return (0, parseObject_1.parseObject)(response.data, url);
+            const dataResult = yield (0, readDataSource_1.readDataUrl)(url);
+            ghActions.info(`Schema loaded from ${dataResult.name} has ${dataResult.dataType} type:`);
+            return (0, parseObject_1.parseObject)(dataResult, dataResult.dataType);
         }
         catch (err) {
             throw new errors_1.SchemaValidationError(`Can't load schema from '${url}': ${err}`);
@@ -199,15 +192,14 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.getActionInputs = exports.INPUT_REF_SCHEMAS_ARRAY = exports.INPUT_REF_SCHEMAS_MAP = exports.INPUT_MODE = exports.INPUT_FILE = exports.INPUT_SCHEMA = void 0;
+exports.getActionInputs = void 0;
 const ghActions = __importStar(__nccwpck_require__(2186));
 const utils_1 = __nccwpck_require__(918);
 const errors_1 = __nccwpck_require__(9292);
-exports.INPUT_SCHEMA = "schema";
-exports.INPUT_FILE = "file";
-exports.INPUT_MODE = "mode";
-exports.INPUT_REF_SCHEMAS_MAP = "refSchemasMap";
-exports.INPUT_REF_SCHEMAS_ARRAY = "refSchemasArray";
+const parserType_1 = __nccwpck_require__(2072);
+function rawInput(name, options) {
+    return ghActions.getInput(name, options);
+}
 /**
  * @throws InputsValidationError
  */
@@ -223,11 +215,12 @@ function getActionInputs() {
         }
     };
     const inputs = {
-        [exports.INPUT_SCHEMA]: readInput(getSchemaInput),
-        [exports.INPUT_FILE]: readInput(getFileInput),
-        [exports.INPUT_MODE]: readInput(getModeInput),
-        [exports.INPUT_REF_SCHEMAS_MAP]: readInput(getRefSchemasMapInput),
-        [exports.INPUT_REF_SCHEMAS_ARRAY]: readInput(getRefSchemasArrayInput)
+        schema: readInput(getSchemaInput),
+        file: readInput(getFileInput),
+        fileParser: readInput(getFileParserInput),
+        mode: readInput(getModeInput),
+        refSchemasMap: readInput(getRefSchemasMapInput),
+        refSchemasArray: readInput(getRefSchemasArrayInput),
     };
     if (errors.length > 0) {
         throw new errors_1.InputsValidationError(errors);
@@ -236,26 +229,36 @@ function getActionInputs() {
 }
 exports.getActionInputs = getActionInputs;
 function getSchemaInput() {
-    return ghActions.getInput(exports.INPUT_SCHEMA, { required: false });
+    return rawInput('schema', { required: false });
 }
 function getFileInput() {
-    return ghActions.getInput(exports.INPUT_FILE, { required: true });
+    return rawInput('file', { required: true });
+}
+function getFileParserInput() {
+    const fileParser = rawInput('fileParser', { required: true });
+    if (fileParser == parserType_1.ParserType.AUTO) {
+        return parserType_1.ParserType.AUTO;
+    }
+    return fileParser
+        .split("|")
+        .map(parserType_1.asActualParserType)
+        .filter((t, index, arr) => arr.indexOf(t) === index);
 }
 function getModeInput() {
-    const mode = ghActions.getInput(exports.INPUT_MODE, { required: true });
+    const mode = rawInput('mode', { required: true });
     const allowedModes = ['default', 'lax', 'strong'];
     if (!allowedModes.includes(mode)) {
-        throw new Error(`"${exports.INPUT_MODE}" has unknown value "${mode}". Allowed values: ${allowedModes.join(', ')}`);
+        throw new Error(`"mode" has unknown value "${mode}". Allowed values: ${allowedModes.join(', ')}`);
     }
     return mode;
 }
 function getRefSchemasMapInput() {
-    const refSchemasMapStr = ghActions.getInput(exports.INPUT_REF_SCHEMAS_MAP, { required: false });
+    const refSchemasMapStr = rawInput('refSchemasMap', { required: false });
     if (!refSchemasMapStr) {
         return new Map;
     }
     let refSchemasMap;
-    const invalidJsonErr = new Error(`${exports.INPUT_REF_SCHEMAS_MAP} should contain a valid {string: string} JSON object`);
+    const invalidJsonErr = new Error(`refSchemasMap should contain a valid {string: string} JSON object`);
     try {
         refSchemasMap = JSON.parse(refSchemasMapStr);
     }
@@ -275,12 +278,12 @@ function getRefSchemasMapInput() {
     return res;
 }
 function getRefSchemasArrayInput() {
-    const refSchemasArrayStr = ghActions.getInput(exports.INPUT_REF_SCHEMAS_ARRAY, { required: false });
+    const refSchemasArrayStr = rawInput('refSchemasArray', { required: false });
     if (!refSchemasArrayStr) {
         return [];
     }
     let refSchemas;
-    const invalidJsonErr = new Error(`${exports.INPUT_REF_SCHEMAS_ARRAY} should contain a valid strings array`);
+    const invalidJsonErr = new Error(`refSchemasArray should contain a valid strings array`);
     try {
         refSchemas = JSON.parse(refSchemasArrayStr);
     }
@@ -325,11 +328,12 @@ var __importStar = (this && this.__importStar) || function (mod) {
     return result;
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.actionOutputs = exports.OUTPUT_ERROR_TYPE = void 0;
+exports.actionOutputs = void 0;
 const ghActions = __importStar(__nccwpck_require__(2186));
-exports.OUTPUT_ERROR_TYPE = 'errorType';
 exports.actionOutputs = {
-    set [exports.OUTPUT_ERROR_TYPE](value) { ghActions.setOutput(exports.OUTPUT_ERROR_TYPE, value); },
+    set errorType(value) {
+        ghActions.setOutput('errorType', value);
+    },
 };
 //# sourceMappingURL=actionOutputs.js.map
 
@@ -341,7 +345,14 @@ exports.actionOutputs = {
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.FileValidationError = exports.DataValidationError = exports.SchemaValidationError = exports.InputsValidationError = exports.ValidatorError = void 0;
+exports.FileValidationError = exports.DataValidationError = exports.SchemaValidationError = exports.InputsValidationError = exports.ValidatorError = exports.ErrorType = void 0;
+var ErrorType;
+(function (ErrorType) {
+    ErrorType["FILE"] = "file";
+    ErrorType["SCHEMA"] = "schema";
+    ErrorType["VALIDATION"] = "validation";
+    ErrorType["INPUTS"] = "inputs";
+})(ErrorType = exports.ErrorType || (exports.ErrorType = {}));
 class ValidatorError extends Error {
     constructor(errorType, errors, advice) {
         super(`${errorType} error`);
@@ -353,25 +364,25 @@ class ValidatorError extends Error {
 exports.ValidatorError = ValidatorError;
 class InputsValidationError extends ValidatorError {
     constructor(errors) {
-        super('inputs', errors);
+        super(ErrorType.INPUTS, errors);
     }
 }
 exports.InputsValidationError = InputsValidationError;
 class SchemaValidationError extends ValidatorError {
     constructor(error, advice) {
-        super('schema', [error], advice);
+        super(ErrorType.SCHEMA, [error], advice);
     }
 }
 exports.SchemaValidationError = SchemaValidationError;
 class DataValidationError extends ValidatorError {
     constructor(errors) {
-        super('validation', errors);
+        super(ErrorType.VALIDATION, errors);
     }
 }
 exports.DataValidationError = DataValidationError;
 class FileValidationError extends ValidatorError {
     constructor(error) {
-        super('file', [error]);
+        super(ErrorType.FILE, [error]);
     }
 }
 exports.FileValidationError = FileValidationError;
@@ -455,11 +466,13 @@ const errors_1 = __nccwpck_require__(9292);
 const getFilePaths_1 = __nccwpck_require__(2254);
 const assert_1 = __importDefault(__nccwpck_require__(9491));
 const SchemaResolver_1 = __nccwpck_require__(564);
-const readDataFile_1 = __nccwpck_require__(1736);
+const readDataSource_1 = __nccwpck_require__(3150);
 const schemasafeValidator_1 = __nccwpck_require__(3066);
 const actionOutputs_1 = __nccwpck_require__(4633);
 const actionInputs_1 = __nccwpck_require__(8366);
 const utils_1 = __nccwpck_require__(918);
+const parseObject_1 = __nccwpck_require__(1580);
+const parserType_1 = __nccwpck_require__(2072);
 // noinspection JSUnusedLocalSymbols
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -500,7 +513,18 @@ function validateFiles(inputs) {
             ? yield schemaResolver.resolve(inputs.schema)
             : undefined;
         for (let filePath of files) {
-            const parsedData = yield (0, readDataFile_1.readAndParseFileData)(filePath);
+            const parsedData = yield (() => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    const fileData = yield (0, readDataSource_1.readDataFile)(filePath);
+                    const fileParser = inputs.fileParser === parserType_1.ParserType.AUTO
+                        ? fileData.dataType
+                        : inputs.fileParser;
+                    return yield (0, parseObject_1.parseObject)(fileData, fileParser);
+                }
+                catch (err) {
+                    throw new errors_1.FileValidationError(String(err));
+                }
+            }))();
             if (!inputs.schema) {
                 const schemaId = (0, utils_1.getIdFromSchemaProperty)(parsedData);
                 ghActions.info(`"Trying to find '${schemaId}' schema from $schema property of the file...`);
@@ -616,7 +640,7 @@ function loadMetaSchemaFromFile(infoFilePath) {
 
 /***/ }),
 
-/***/ 8574:
+/***/ 1580:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -651,27 +675,93 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseObject = void 0;
 const yaml_1 = __importDefault(__nccwpck_require__(4083));
 const ghActions = __importStar(__nccwpck_require__(2186));
-function parseObject(data, name) {
-    for (let parser of [
-        { name: 'JSON', parse: (s) => JSON.parse(s) },
-        { name: 'YAML', parse: (s) => yaml_1.default.parse(s) },
-    ]) {
+const parserType_1 = __nccwpck_require__(2072);
+function getParser(parserType) {
+    switch (parserType) {
+        case parserType_1.ParserType.JSON: return JSON.parse;
+        case parserType_1.ParserType.YAML: return yaml_1.default.parse;
+    }
+    throw new Error(`Unknown parser type '${parserType}'`);
+}
+function parseObject(data, parserTypes) {
+    if (parserTypes == undefined) {
+        parserTypes = [parserType_1.ParserType.JSON, parserType_1.ParserType.YAML];
+    }
+    else if (!Array.isArray(parserTypes)) {
+        parserTypes = [parserTypes];
+    }
+    const errors = [];
+    for (let parserType of parserTypes) {
         try {
-            const result = parser.parse(data);
-            ghActions.info(`Contents of '${name}' has been parsed as ${parser.name} ${typeof result}`);
+            const result = getParser(parserType)(data.data);
+            ghActions.info(`Contents of '${data.name}' has been parsed as ${parserType} ${typeof result}`);
             return result;
         }
         catch (err) {
+            errors.push(`${parserType}: ${err}`);
         }
     }
-    throw new Error(`Contents of '${name}' aren't a valid JSON or YAML`);
+    throw new Error(`Contents of '${data.name}' aren't a valid ${parserTypes.join(' or ')}: ${errors.join('; ')}`);
 }
 exports.parseObject = parseObject;
 //# sourceMappingURL=parseObject.js.map
 
 /***/ }),
 
-/***/ 1736:
+/***/ 2072:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.getParserTypeByFileExt = exports.getParserTypeByContentType = exports.asActualParserType = exports.ParserType = void 0;
+var ParserType;
+(function (ParserType) {
+    ParserType["JSON"] = "json";
+    ParserType["YAML"] = "yaml";
+    ParserType["AUTO"] = "auto";
+})(ParserType = exports.ParserType || (exports.ParserType = {}));
+function asActualParserType(value) {
+    if (value != ParserType.JSON && value != ParserType.YAML) {
+        throw new Error(`Invalid parser type '${value}'`);
+    }
+    return value;
+}
+exports.asActualParserType = asActualParserType;
+const JSON_CONTENT_TYPES = ["application/json"];
+const YAML_CONTENT_TYPES = [
+    "text/x-yaml",
+    "text/yaml",
+    "text/yml",
+    "application/x-yaml",
+    "application/x-yml",
+    "application/yaml",
+    "application/yml"
+];
+function getParserTypeByContentType(contentType) {
+    if (JSON_CONTENT_TYPES.indexOf(contentType.toLowerCase()) != -1) {
+        return ParserType.JSON;
+    }
+    if (YAML_CONTENT_TYPES.indexOf(contentType.toLowerCase()) != -1) {
+        return ParserType.YAML;
+    }
+    return undefined;
+}
+exports.getParserTypeByContentType = getParserTypeByContentType;
+function getParserTypeByFileExt(ext) {
+    switch (ext) {
+        case ".json": return ParserType.JSON;
+        case ".yml":
+        case ".yaml": return ParserType.YAML;
+    }
+    return undefined;
+}
+exports.getParserTypeByFileExt = getParserTypeByFileExt;
+//# sourceMappingURL=parserType.js.map
+
+/***/ }),
+
+/***/ 3150:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 "use strict";
@@ -708,23 +798,39 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.readAndParseFileData = void 0;
-const parseObject_1 = __nccwpck_require__(8574);
+exports.readDataUrl = exports.readDataFile = void 0;
 const fs = __importStar(__nccwpck_require__(5630));
-const errors_1 = __nccwpck_require__(9292);
-function readAndParseFileData(file) {
+const path = __importStar(__nccwpck_require__(1017));
+const parserType_1 = __nccwpck_require__(2072);
+const axios_1 = __importDefault(__nccwpck_require__(76));
+function readDataFile(filePath) {
     return __awaiter(this, void 0, void 0, function* () {
-        try {
-            return (0, parseObject_1.parseObject)((yield fs.readFile(file)).toString(), file);
-        }
-        catch (err) {
-            throw new errors_1.FileValidationError('Error reading file. ' + err);
-        }
+        return {
+            data: (yield fs.readFile(filePath)).toString(),
+            name: filePath,
+            dataType: (0, parserType_1.getParserTypeByFileExt)(path.extname(filePath))
+        };
     });
 }
-exports.readAndParseFileData = readAndParseFileData;
-//# sourceMappingURL=readDataFile.js.map
+exports.readDataFile = readDataFile;
+function readDataUrl(url) {
+    return __awaiter(this, void 0, void 0, function* () {
+        const response = yield axios_1.default.get(url, {
+            responseType: 'text'
+        });
+        return {
+            data: response.data,
+            name: url,
+            dataType: (0, parserType_1.getParserTypeByContentType)(response.headers['content-length'])
+        };
+    });
+}
+exports.readDataUrl = readDataUrl;
+//# sourceMappingURL=readDataSource.js.map
 
 /***/ }),
 
