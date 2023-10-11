@@ -4,7 +4,7 @@ import {getFilePaths} from "./getFilePaths";
 import assert from "assert";
 import {resolveRefSchemas, SchemaResolver} from "./SchemaResolver";
 import {readDataFile} from "./parser/readDataSource";
-import {validateAgainstResolvedSchema} from "./schemasafeValidator";
+import {fixResolvedSchema, validateAgainstResolvedSchema} from "./schemasafeValidator";
 import {actionOutputs} from "./actionOutputs";
 import {ActionInputs, getActionInputs} from "./actionInputs";
 import {getIdFromSchemaProperty} from "./utils";
@@ -65,6 +65,10 @@ export async function validateFiles(inputs: ActionInputs) {
             resolvedSchema = await schemaResolver.resolve(schemaId)
         }
         assert(resolvedSchema !== undefined);
+
+        if (inputs.fixSchemas) {
+            fixResolvedSchema(resolvedSchema)
+        }
         await validateAgainstResolvedSchema(parsedData, resolvedSchema, inputs.mode)
     }
     ghActions.info('Validated');

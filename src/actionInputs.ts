@@ -12,6 +12,7 @@ export interface ActionInputs {
     mode: SchemasafeMode,
     refSchemasMap: Map<string, string>,
     refSchemasArray: string[]
+    fixSchemas: boolean
 }
 
 export type RawActionInputs = Partial<{
@@ -42,6 +43,7 @@ export function getActionInputs(): ActionInputs {
         mode: readInput(getModeInput),
         refSchemasMap: readInput(getRefSchemasMapInput),
         refSchemasArray: readInput(getRefSchemasArrayInput),
+        fixSchemas: readInput(getFixSchemasInput),
     }
     if (errors.length > 0) {
         throw new InputsValidationError(errors)
@@ -70,7 +72,7 @@ function getFileParserInput(): ActualParserType[]|ParserType.AUTO {
 
 function getModeInput(): SchemasafeMode {
     const mode = rawInput('mode', {required: true})
-    const allowedModes: SchemasafeMode[] = ['default', 'lax', 'strong']
+    const allowedModes: SchemasafeMode[] = ['default', 'lax', 'strong', 'spec']
     if (!allowedModes.includes(mode as SchemasafeMode)) {
         throw new Error(`"mode" has unknown value "${mode}". Allowed values: ${allowedModes.join(', ')}`)
     }
@@ -118,4 +120,9 @@ function getRefSchemasArrayInput(): string[] {
         throw invalidJsonErr
     }
     return refSchemas
+}
+
+function getFixSchemasInput(): boolean {
+    const mode = rawInput('fixSchemas', {required: false})
+    return ['true', '1'].includes(mode)
 }

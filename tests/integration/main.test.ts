@@ -1,24 +1,29 @@
 import {deleteAllFakedDirs, RunOptions, RunTarget} from "github-action-ts-run-api";
-import {ADD_EXTERNAL_SCHEMAS_ADVICE, TRY_LAX_MODE_ADVICE} from "../../src/schemasafeValidator";
+import {ADD_EXTERNAL_SCHEMAS_ADVICE, TRY_LAX_MODE_ADVICE, TRY_FIX_SCHEMAS_ADVICE} from "../../src/schemasafeValidator";
 import {RawActionInputs} from "../../src/actionInputs";
 import {RawActionOutputs} from "../../src/actionOutputs";
 import {ErrorType} from "../../src/errors";
 import {ParserType} from "../../src/parser/parserType";
+// @ts-ignore
+import {createSchemasHttpServer} from "./schemasHttpServer";
 
 describe('main', () => {
     const target = process.env.CI
         ? RunTarget.mainJs('action.yml')
         : RunTarget.jsFile('lib/index.js', 'action.yml');
+    const schemasHttpServer = createSchemasHttpServer(34567)
+    const schemasServerHost = 'http://localhost:34567'
 
     afterAll(() => {
         deleteAllFakedDirs()
+        schemasHttpServer.close()
     })
 
     it('should validate action.yml against draft-07 schema', async () => {
         const res = await target.run(RunOptions.create({
             inputs: {
                 file: 'action.yml',
-                schema: 'https://json.schemastore.org/github-action.json'
+                schema: `${schemasServerHost}/github-action.schema.json`
             } as RawActionInputs
         }));
         expect(res.isSuccess).toEqual(true);
@@ -43,7 +48,7 @@ describe('main', () => {
         const res = await target.run(RunOptions.create({
             inputs: {
                 file: 'action.yml',
-                schema: 'https://json.schemastore.org/sprite.json'
+                schema: `${schemasServerHost}/sprite.schema.json`
             } as RawActionInputs
         }));
         expect(res.isSuccess).toEqual(false);
@@ -56,7 +61,7 @@ describe('main', () => {
         const res = await target.run(RunOptions.create({
             inputs: {
                 file: 'package.json',
-                schema: 'https://json.schemastore.org/github-action.json'
+                schema: `${schemasServerHost}/github-action.schema.json`
             } as RawActionInputs
         }));
         expect(res.isSuccess).toEqual(false);
@@ -272,6 +277,37 @@ describe('main', () => {
             expect(res.commands.errors).toEqual([]);
             expect(res.commands.outputs).toEqual({} as RawActionOutputs);
         }
+        expect(res.runnerWarnings).toHaveLength(0);
+    });
+
+    it('should fail validating chrome manifest against chrome-manifest.schema', async () => {
+        const res = await target.run(RunOptions.create({
+            workingDir: 'tests/integration',
+            inputs: {
+                schema: 'data/schemas/chrome-manifest.schema.json',
+                file: 'data/files/chrome_manifest.json',
+                mode: 'spec'
+            } as RawActionInputs
+        }));
+        expect(res.isSuccess).toEqual(false);
+        expect(res.commands.outputs).toEqual({errorType: ErrorType.SCHEMA} as RawActionOutputs);
+        expect(res.stdout).toContain(TRY_FIX_SCHEMAS_ADVICE);
+        expect(res.runnerWarnings).toHaveLength(0);
+    });
+
+    it('should validate chrome manifest against chrome-manifest.schema with fixSchemas', async () => {
+        const res = await target.run(RunOptions.create({
+            workingDir: 'tests/integration',
+            inputs: {
+                schema: 'data/schemas/chrome-manifest.schema.json',
+                file: 'data/files/chrome_manifest.json',
+                mode: 'spec',
+                fixSchemas: 'true',
+            } as RawActionInputs
+        }));
+        expect(res.isSuccess).toEqual(true);
+        expect(res.commands.errors).toEqual([]);
+        expect(res.commands.outputs).toEqual({});
         expect(res.runnerWarnings).toHaveLength(0);
     });
 });

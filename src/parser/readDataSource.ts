@@ -24,6 +24,6 @@ export async function readDataUrl(url: string): Promise<DataResult> {
     return {
         data: response.data,
         name: url,
-        dataType: getParserTypeByContentType(response.headers['content-length'])
+        dataType: getParserTypeByContentType(response.headers['content-type'])
     }
 }

@@ -57,10 +57,19 @@ Input value has a priority over `$schema` property in file if both present.
 ### 🔸 `mode` _default value: "default"_
 Sets the strictness of the schema compiling. Possible values:
 - `lax`: the most relaxed mode
+- `spec`: mode is the same as 'lax' but also disables format assertion in draft2019-09 and newer $schema versions
 - `default`: used **by default**, doesn't allow unknown keywords and unreachable checks to be present in the schema 
 - `strong`: the most strict mode
 
 Read details in [schemasafe documentation](https://github.com/ExodusMovement/schemasafe/blob/master/doc/Options.md).
+
+### 🔸 `fixSchema` _experimental, default value: "false"_
+If `true`, tries to fix schema by stripping non-default "format" instructions to make it valid for the
+underlying library.
+
+This input is **experimental**, and it's behaviour can be changed in future versions.
+
+## Advanced inputs
 
 ### 🔸 `fileParser` _default value: "auto"_
 Determines the way files will be parsed (as JSON or as YAML). Possible values:
