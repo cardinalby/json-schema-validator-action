@@ -32,7 +32,7 @@ outputs:
   validation_error:
     description: 'Error during file validation'
 runs:
-  using: 'node16'
+  using: 'node20'
   main: 'dist/index.js'
 branding:
   icon: 'code'
