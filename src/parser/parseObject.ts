@@ -1,4 +1,4 @@
-import YAML from "yaml";
+import * as YAML from 'js-yaml'
 import * as ghActions from "@actions/core";
 import {ActualParserType, ParserType} from "./parserType";
 
@@ -12,7 +12,7 @@ type Parser = (s: string) => any
 function getParser(parserType: ActualParserType): Parser {
     switch (parserType) {
         case ParserType.JSON: return JSON.parse
-        case ParserType.YAML: return YAML.parse
+        case ParserType.YAML: return YAML.load
     }
     throw new Error(`Unknown parser type '${parserType}'`)
 }
