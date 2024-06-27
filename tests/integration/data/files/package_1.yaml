@@ -1,0 +1,5 @@
+base_config: &base
+  name: name1
+<<: *base
+description: test test
+main: hello.js

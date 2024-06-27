@@ -310,4 +310,19 @@ describe('main', () => {
         expect(res.commands.outputs).toEqual({});
         expect(res.runnerWarnings).toHaveLength(0);
     });
+
+    it('should validate yaml with inheritance', async () => {
+        const res = await target.run(RunOptions.create({
+            inputs: {
+                file: 'tests/integration/data/files/package_1.yaml',
+                fileParser: ParserType.YAML,
+                schema: 'tests/integration/data/schemas/package.schema.json',
+                mode: 'lax'
+            } as RawActionInputs
+        }));
+        expect(res.isSuccess).toEqual(true);
+        expect(res.commands.errors).toEqual([]);
+        expect(res.commands.outputs).toEqual({});
+        expect(res.runnerWarnings).toHaveLength(0);
+    });
 });

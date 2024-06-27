@@ -1,6 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-04/schema#",
   "title": "JSON schema for NPM package.json files",
+  "required": ["name"],
   "definitions": {
     "person": {
       "description": "A person who has been involved in creating or maintaining this package.",
